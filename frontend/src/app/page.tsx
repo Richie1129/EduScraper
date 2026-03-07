@@ -42,21 +42,27 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
       {/* 標籤篩選列 */}
       <div className="flex flex-wrap gap-2 mb-8 justify-center">
-        {["SRL", "PBL", "AI", "edtech", "higher education", "assessment", "K-12"].map(
-          (t) => (
+        {[
+          { value: "srl", label: "SRL" },
+          { value: "pbl", label: "PBL" },
+          { value: "ai", label: "AI" },
+          { value: "edtech", label: "edtech" },
+          { value: "higher education", label: "higher education" },
+          { value: "assessment", label: "assessment" },
+          { value: "k-12", label: "K-12" },
+        ].map(({ value, label }) => (
             <a
-              key={t}
-              href={tag === t ? "/" : `/?tag=${encodeURIComponent(t)}`}
+              key={value}
+              href={tag === value ? "/" : `/?tag=${encodeURIComponent(value)}`}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                tag === t
+                tag === value
                   ? "bg-blue-600 text-white"
                   : "bg-white border border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-600"
               }`}
             >
-              {t}
+              {label}
             </a>
-          )
-        )}
+          ))}
         {tag && (
           <a
             href="/"
