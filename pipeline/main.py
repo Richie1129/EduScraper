@@ -93,7 +93,7 @@ def run_pipeline(max_articles: int = 50, use_backup_vllm: bool = False) -> int:
     # ── 初始化服務 ────────────────────────────────────────────────
     try:
         storage = SupabaseStorage()
-        processor = VLLMProcessor(use_hsueh=use_backup_vllm)
+        processor = VLLMProcessor()
     except ValueError as exc:
         logger.error("初始化失敗：%s", exc)
         return 0

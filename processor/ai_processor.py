@@ -6,6 +6,7 @@ AI 內容處理模組
 import json
 import logging
 import os
+import random
 import re
 import time
 from typing import Optional
@@ -84,41 +85,44 @@ class VLLMProcessor:
     支援主要伺服器與備用伺服器自動切換。
     """
 
-    def __init__(self, use_hsueh: bool = False):
-        use_backup = use_hsueh or os.getenv("USE_HSUEH_VLLM", "false").lower() == "true"
+    def __init__(self):
+        primary = {
+            "base_url": os.getenv("VLLM_BASE_URL"),
+            "api_key": os.getenv("VLLM_API_KEY"),
+            "model": os.getenv("VLLM_MODEL_NAME"),
+            "label": "Primary vLLM",
+        }
+        hsueh = {
+            "base_url": os.getenv("HSUEH_VLLM_BASE_URL"),
+            "api_key": os.getenv("HSUEH_VLLM_API_KEY"),
+            "model": os.getenv("HSUEH_VLLM_MODEL_NAME"),
+            "label": "Hsueh vLLM",
+        }
 
-        if use_backup:
-            base_url = os.getenv("HSUEH_VLLM_BASE_URL")
-            api_key = os.getenv("HSUEH_VLLM_API_KEY", "dummy")
-            self.model = os.getenv("HSUEH_VLLM_MODEL_NAME")
-            server_label = "Hsueh vLLM"
-        else:
-            base_url = os.getenv("VLLM_BASE_URL")
-            api_key = os.getenv("VLLM_API_KEY")
-            self.model = os.getenv("VLLM_MODEL_NAME")
-            server_label = "Primary vLLM"
+        # 過濾掉未設定的伺服器
+        servers = [s for s in [primary, hsueh] if s["base_url"] and s["model"]]
+        if not servers:
+            raise ValueError("至少需要設定一組 vLLM 伺服器環境變數")
 
-        if not base_url:
-            raise ValueError(f"vLLM base URL 未設定（伺服器：{server_label}）")
-        if not self.model:
-            raise ValueError(f"vLLM model name 未設定（伺服器：{server_label}）")
+        # 隨機決定優先順序，另一台作為 fallback
+        random.shuffle(servers)
+        self._servers = servers
+        logger.info(
+            "VLLMProcessor 初始化完成，呼叫順序：%s",
+            " → ".join(s["label"] for s in servers),
+        )
 
-        self.client = OpenAI(base_url=base_url, api_key=api_key or "dummy")
-        logger.info("VLLMProcessor 初始化完成 [%s] 模型：%s", server_label, self.model)
-
-    def process_article(self, article: dict) -> Optional[dict]:
-        """
-        將文章傳送至 vLLM 進行 AI 處理，回傳結構化摘要字典。
-        失敗時回傳 None。
-        """
-        prompt = build_analysis_prompt(article)
-        title_preview = article.get("original_title", "")[:60]
+    def _try_server(self, server: dict, prompt: str, title_preview: str) -> Optional[dict]:
+        """對單一伺服器最多重試 3 次，成功回傳結構化資料，失敗回傳 None。"""
+        client = OpenAI(base_url=server["base_url"], api_key=server["api_key"] or "dummy")
+        model: str = server["model"]
+        label: str = server["label"]
         raw_content: Optional[str] = None
 
-        for attempt in range(1, 4):  # 最多重試 3 次
+        for attempt in range(1, 4):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
+                response = client.chat.completions.create(
+                    model=model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
@@ -132,8 +136,8 @@ class VLLMProcessor:
 
                 if not raw_content:
                     logger.warning(
-                        "vLLM 回應內容為空（finish_reason=%s）（第 %d 次）文章：%s",
-                        finish_reason, attempt, title_preview,
+                        "[%s] 回應內容為空（finish_reason=%s）（第 %d 次）文章：%s",
+                        label, finish_reason, attempt, title_preview,
                     )
                     if attempt < 3:
                         time.sleep(2)
@@ -141,47 +145,41 @@ class VLLMProcessor:
 
                 data = _extract_json(raw_content)
 
-                # 驗證必要欄位
                 missing = _REQUIRED_FIELDS - set(data.keys())
                 if missing:
                     logger.warning(
-                        "AI 回應缺少欄位 %s，文章：%s（第 %d 次）",
-                        missing, title_preview, attempt,
+                        "[%s] 回應缺少欄位 %s，文章：%s（第 %d 次）",
+                        label, missing, title_preview, attempt,
                     )
                     if attempt < 3:
                         time.sleep(2)
                         continue
 
-                # 確保 key_findings 是包含最多 5 個字串的列表
                 findings = data.get("key_findings", [])
                 if not isinstance(findings, list) or len(findings) < 1:
                     data["key_findings"] = []
                 else:
                     data["key_findings"] = [str(f) for f in findings[:5]]
 
-                # 確保 tags 是字串列表
                 tags = data.get("tags", [])
                 if not isinstance(tags, list):
                     data["tags"] = []
                 else:
                     data["tags"] = [str(t).lower() for t in tags[:5]]
 
-                # 確保 relevance_score 是整數
                 try:
                     data["relevance_score"] = int(data.get("relevance_score", 5))
                 except (ValueError, TypeError):
                     data["relevance_score"] = 5
 
-                # 注入使用的模型名稱
-                data["model_name"] = self.model
-
-                logger.debug("AI 處理成功：%s", title_preview)
+                data["model_name"] = model
+                logger.debug("[%s] AI 處理成功：%s", label, title_preview)
                 return data
 
             except json.JSONDecodeError as exc:
                 logger.warning(
-                    "JSON 解析失敗（第 %d 次）文章：%s — %s\n  回應前300字：%s",
-                    attempt, title_preview, exc,
+                    "[%s] JSON 解析失敗（第 %d 次）文章：%s — %s\n  回應前300字：%s",
+                    label, attempt, title_preview, exc,
                     raw_content[:300] if raw_content else "(空回應)",
                 )
                 if attempt < 3:
@@ -189,25 +187,42 @@ class VLLMProcessor:
 
             except (RateLimitError, APITimeoutError) as exc:
                 logger.warning(
-                    "API 速率限制或逾時（第 %d 次）文章：%s — %s",
-                    attempt, title_preview, exc,
+                    "[%s] 速率限制或逾時（第 %d 次）文章：%s — %s",
+                    label, attempt, title_preview, exc,
                 )
                 time.sleep(10 * attempt)
 
             except APIError as exc:
                 logger.error(
-                    "vLLM API 錯誤（第 %d 次）文章：%s — %s",
-                    attempt, title_preview, exc,
+                    "[%s] API 錯誤（第 %d 次）文章：%s — %s",
+                    label, attempt, title_preview, exc,
                 )
                 if attempt < 3:
                     time.sleep(5)
 
             except Exception as exc:
                 logger.error(
-                    "未預期錯誤（第 %d 次）文章：%s — %s",
-                    attempt, title_preview, exc, exc_info=True,
+                    "[%s] 未預期錯誤（第 %d 次）文章：%s — %s",
+                    label, attempt, title_preview, exc, exc_info=True,
                 )
                 break
 
-        logger.error("AI 處理失敗，已放棄：%s", title_preview)
+        logger.warning("[%s] 重試 3 次失敗，放棄此伺服器：%s", label, title_preview)
+        return None
+
+    def process_article(self, article: dict) -> Optional[dict]:
+        """
+        隨機選擇一台 vLLM 伺服器處理文章，失敗時自動 fallback 至另一台。
+        兩台都失敗才放棄，回傳 None。
+        """
+        prompt = build_analysis_prompt(article)
+        title_preview = article.get("original_title", "")[:60]
+
+        for server in self._servers:
+            result = self._try_server(server, prompt, title_preview)
+            if result is not None:
+                return result
+            logger.info("嘗試下一台伺服器（fallback）：%s", title_preview)
+
+        logger.error("所有伺服器均失敗，已放棄：%s", title_preview)
         return None
