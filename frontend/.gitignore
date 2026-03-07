@@ -1,0 +1,17 @@
+# Next.js 產物
+.next/
+out/
+
+# 依賴
+node_modules/
+
+# 環境變數（包含機密金鑰）
+.env.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# 系統
+.DS_Store
+Thumbs.db

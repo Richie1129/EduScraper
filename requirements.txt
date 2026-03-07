@@ -1,0 +1,23 @@
+# EduScraper Python 依賴套件
+
+# RSS 訂閱解析
+feedparser==6.0.11
+
+# 靜態網頁爬蟲
+beautifulsoup4==4.12.3
+lxml==5.1.0
+requests==2.31.0
+
+# 動態網頁爬蟲（JS 渲染）
+playwright==1.41.2
+
+# AI 處理（OpenAI 相容 API → vLLM）
+openai>=1.40.0
+
+# 資料庫
+supabase>=2.7.4
+
+# 工具
+python-dotenv==1.0.1
+python-dateutil==2.8.2
+python-slugify==8.0.4

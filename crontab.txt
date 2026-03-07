@@ -1,0 +1,9 @@
+# EduScraper Crontab
+# 格式：分 時 日 月 週 指令
+#
+# 台灣時間 02:00（UTC+8）= UTC 18:00 執行
+# 若容器時區已設定為 Asia/Taipei，則直接使用：0 2 * * *
+
+0 18 * * * cd /app && python -m pipeline.main >> /app/logs/eduscraper.log 2>&1
+
+# 確保末尾有換行（cron 要求）

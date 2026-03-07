@@ -1,0 +1,35 @@
+services:
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    container_name: eduscraper-pipeline
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    # 可選：手動觸發執行而非透過 cron
+    # command: python -m pipeline.main --limit 50
+
+  frontend:
+    image: node:20-slim
+    container_name: eduscraper-frontend
+    working_dir: /app
+    command: sh -c "npm install && npx next dev -H 0.0.0.0"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - WATCHPACK_POLLING=true      # 確保 Docker volume mount 下檔案異動被偵測
+      - CHOKIDAR_USEPOLLING=true    # 備援檔案監聽，適用於部分 Docker 環境
+      # Next.js 需要 NEXT_PUBLIC_ 前綴才能在 client-side 讀取
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - ./frontend:/app                        # 源碼熱重載
+      - /app/node_modules                      # 隔離 container 內的 node_modules
+    restart: unless-stopped

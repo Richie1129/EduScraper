@@ -1,0 +1,74 @@
+import Link from "next/link";
+import { FiBook, FiAlertTriangle } from "react-icons/fi";
+
+const TOPIC_LINKS = [
+  { href: "/?tag=SRL", label: "自主學習 (SRL)" },
+  { href: "/?tag=PBL", label: "專題式學習 (PBL)" },
+  { href: "/?tag=AI", label: "AI 教育應用" },
+  { href: "/?tag=edtech", label: "教育科技 (EdTech)" },
+  { href: "/?tag=assessment", label: "學習評量" },
+  { href: "/?tag=K-12", label: "K-12 教育" },
+];
+
+export default function Footer() {
+  return (
+    <footer className="bg-gray-900 text-gray-400 mt-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 mb-10">
+          {/* 品牌介紹 */}
+          <div>
+            <Link href="/" className="flex items-center gap-2 mb-4">
+              <FiBook className="w-6 h-6 text-blue-400" aria-hidden="true" />
+              <span className="text-xl font-extrabold text-white">
+                EduInsight
+              </span>
+            </Link>
+            <p className="text-sm leading-relaxed">
+              每日自動彙整全球教育科技與學習科學研究，以繁體中文 AI
+              摘要助力台灣教師掌握前沿知識。
+            </p>
+          </div>
+
+          {/* 主題分類 */}
+          <div>
+            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">
+              主題分類
+            </h3>
+            <ul className="space-y-2">
+              {TOPIC_LINKS.map(({ href, label }) => (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    className="text-sm hover:text-white transition-colors"
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* 關於本站 */}
+          <div>
+            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">
+              關於本站
+            </h3>
+            <ul className="space-y-2 text-sm">
+              <li>內容來源：國際學術期刊、arXiv、EdTech 媒體</li>
+              <li>更新頻率：每日自動更新</li>
+              <li>語言：繁體中文 AI 摘要</li>
+              <li className="flex items-center gap-1.5">
+                <FiAlertTriangle className="text-yellow-400 shrink-0" aria-hidden="true" />
+                AI 摘要僅供參考，完整資訊請閱讀原文
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-700 pt-8 text-center text-xs text-gray-600">
+          © {new Date().getFullYear()} EduInsight. AI 摘要由大型語言模型生成，內容僅供參考。
+        </div>
+      </div>
+    </footer>
+  );
+}
