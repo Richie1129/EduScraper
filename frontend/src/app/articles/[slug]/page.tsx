@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getArticleBySlug, getAllSlugs } from "@/lib/supabase";
-import AdSense from "@/components/AdSense";
+// import AdSense from "@/components/AdSense";
 import NewsletterForm from "@/components/NewsletterForm";
 import { FiBookmark, FiZap, FiExternalLink } from "react-icons/fi";
 
@@ -137,7 +137,7 @@ export default async function ArticlePage({ params }: Props) {
           </div>
 
           {/* 上方廣告 */}
-          <AdSense slot="3456789012" />
+          {/* <AdSense slot="3456789012" /> */}
 
           {/* 核心研究發現 */}
           {article.key_findings && article.key_findings.length > 0 && (
@@ -181,7 +181,7 @@ export default async function ArticlePage({ params }: Props) {
           )}
 
           {/* 中間廣告 */}
-          <AdSense slot="4567890123" />
+          {/* <AdSense slot="4567890123" /> */}
 
           {/* 原始文獻資訊 */}
           <section className="mb-10 p-6 bg-gray-50 border border-gray-200 rounded-xl">
@@ -203,6 +203,12 @@ export default async function ArticlePage({ params }: Props) {
                 <dt className="font-semibold inline">來源：</dt>
                 <dd className="inline">{article.source_name}</dd>
               </div>
+              {article.model_name && (
+                <div>
+                  <dt className="font-semibold inline">AI 摘要模型：</dt>
+                  <dd className="inline font-mono text-xs bg-gray-200 px-1.5 py-0.5 rounded">{article.model_name}</dd>
+                </div>
+              )}
             </dl>
             <a
               href={article.source_url}

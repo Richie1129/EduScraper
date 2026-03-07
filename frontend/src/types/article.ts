@@ -10,8 +10,11 @@ export interface Article {
   one_sentence_summary: string;
   key_findings: string[];
   practical_insights: string;
+  research_method: string | null;
+  target_audience: string | null;
   tags: string[];
   relevance_score: number;
+  model_name: string | null;
   published_at: string;
   processed_at: string;
   created_at: string;
