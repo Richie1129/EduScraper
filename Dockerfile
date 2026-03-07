@@ -31,7 +31,7 @@ COPY . .
 # 複製建構好的 Next.js 產物
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
 COPY --from=frontend-builder /app/frontend/node_modules ./frontend/node_modules
-COPY --from=frontend-builder /app/frontend/public ./frontend/public
+COPY --from=frontend-builder /app/frontend/package.json ./frontend/package.json
 
 # 複製 supervisord 設定
 COPY supervisord.conf /etc/supervisor/conf.d/eduscraper.conf
