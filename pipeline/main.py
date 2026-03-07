@@ -11,7 +11,6 @@ EduScraper 主要資料管線
 用法：
   python -m pipeline.main
   python -m pipeline.main --limit 20
-  python -m pipeline.main --use-backup-vllm
 """
 
 import argparse
@@ -73,13 +72,12 @@ def ensure_unique_slug(slug: str, storage: SupabaseStorage) -> str:
     return f"{slug}-{timestamp}"
 
 
-def run_pipeline(max_articles: int = 50, use_backup_vllm: bool = False) -> int:
+def run_pipeline(max_articles: int = 50) -> int:
     """
     執行完整資料管線。
 
     Args:
         max_articles: 此次執行最多處理的文章數量
-        use_backup_vllm: 是否使用備用 vLLM 伺服器
 
     Returns:
         int: 成功儲存的文章數量
@@ -205,15 +203,9 @@ def main():
         default=int(os.getenv("MAX_ARTICLES_PER_RUN", "50")),
         help="每次執行最多處理的文章數量（預設：50）",
     )
-    parser.add_argument(
-        "--use-backup-vllm",
-        action="store_true",
-        default=os.getenv("USE_HSUEH_VLLM", "false").lower() == "true",
-        help="使用備用 vLLM 伺服器（Hsueh）",
-    )
     args = parser.parse_args()
 
-    count = run_pipeline(max_articles=args.limit, use_backup_vllm=args.use_backup_vllm)
+    count = run_pipeline(max_articles=args.limit)
     sys.exit(0 if count >= 0 else 1)
 
 
