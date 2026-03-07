@@ -63,7 +63,7 @@ export default async function ArticlePage({ params }: Props) {
     dateModified: article.processed_at,
     inLanguage: "zh-TW",
     author:
-      article.authors.length > 0
+      (article.authors?.length ?? 0) > 0
         ? article.authors.map((name) => ({ "@type": "Person", name }))
         : [{ "@type": "Organization", name: article.source_name }],
     publisher: {
@@ -75,7 +75,7 @@ export default async function ArticlePage({ params }: Props) {
       url: article.source_url,
       name: article.original_title,
     },
-    keywords: article.tags.join(", "),
+    keywords: (article.tags ?? []).join(", "),
   };
 
   return (
@@ -101,7 +101,7 @@ export default async function ArticlePage({ params }: Props) {
           <header className="mb-8">
             {/* 標籤 */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {article.tags.map((tag) => (
+              {(article.tags ?? []).map((tag) => (
                 <Link
                   key={tag}
                   href={`/?tag=${encodeURIComponent(tag)}`}
@@ -122,7 +122,7 @@ export default async function ArticlePage({ params }: Props) {
                   {article.source_name}
                 </span>
               )}
-              {article.authors.length > 0 && (
+              {(article.authors?.length ?? 0) > 0 && (
                 <span>{article.authors.slice(0, 3).join("、")}</span>
               )}
               <time dateTime={article.published_at}>{publishedDate}</time>
@@ -196,7 +196,7 @@ export default async function ArticlePage({ params }: Props) {
               {article.authors.length > 0 && (
                 <div>
                   <dt className="font-semibold inline">作者：</dt>
-                  <dd className="inline">{article.authors.join(", ")}</dd>
+                  <dd className="inline">{(article.authors ?? []).join(", ")}</dd>
                 </div>
               )}
               <div>
