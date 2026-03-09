@@ -6,7 +6,7 @@ interface ArticleCardProps {
 }
 
 export default function ArticleCard({ article }: ArticleCardProps) {
-  const publishedDate = new Date(article.published_at).toLocaleDateString(
+  const createdDate = new Date(article.created_at).toLocaleDateString(
     "zh-TW",
     { year: "numeric", month: "long", day: "numeric" }
   );
@@ -40,11 +40,11 @@ export default function ArticleCard({ article }: ArticleCardProps) {
         </p>
 
         {/* 底部資訊列 */}
-        <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+        <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 gap-3">
           <span className="font-medium text-gray-600 truncate max-w-[60%]">
             {article.source_name}
           </span>
-          <time dateTime={article.published_at}>{publishedDate}</time>
+          <time dateTime={article.created_at}>{createdDate}</time>
         </div>
       </div>
     </article>
