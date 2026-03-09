@@ -45,8 +45,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── 延遲匯入（確保日誌設定完成後再匯入子模組） ────────────────────
-from scraper.sources import RSS_SOURCES  # noqa: E402
+from scraper.sources import RSS_SOURCES, SCRAPE_SOURCES  # noqa: E402
 from scraper.rss_fetcher import fetch_all_feeds  # noqa: E402
+from scraper.web_scraper import fetch_all_scrape_sources  # noqa: E402
 from processor.ai_processor import VLLMProcessor  # noqa: E402
 from storage.supabase_client import SupabaseStorage  # noqa: E402
 
@@ -70,6 +71,21 @@ def ensure_unique_slug(slug: str, storage: SupabaseStorage) -> str:
         return slug
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
     return f"{slug}-{timestamp}"
+
+
+def _dedupe_articles_by_url(articles: list[dict]) -> list[dict]:
+    """依 source_url 去重，保留原始順序。"""
+    seen: set[str] = set()
+    deduped: list[dict] = []
+
+    for article in articles:
+        url = article.get("source_url")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(article)
+
+    return deduped
 
 
 def run_pipeline(max_articles: int = 50) -> int:
@@ -96,10 +112,21 @@ def run_pipeline(max_articles: int = 50) -> int:
         logger.error("初始化失敗：%s", exc)
         return 0
 
-    # ── 步驟 1：抓取 RSS ──────────────────────────────────────────
-    logger.info("步驟 1/3：抓取 RSS 訂閱來源（共 %d 個來源）", len(RSS_SOURCES))
-    all_articles = fetch_all_feeds(RSS_SOURCES)
-    logger.info("抓取完成，共 %d 篇文章", len(all_articles))
+    # ── 步驟 1：抓取來源 ──────────────────────────────────────────
+    logger.info(
+        "步驟 1/3：抓取內容來源（RSS %d 個，補充爬蟲 %d 個）",
+        len(RSS_SOURCES),
+        len(SCRAPE_SOURCES),
+    )
+    rss_articles = fetch_all_feeds(RSS_SOURCES)
+    scrape_articles = fetch_all_scrape_sources(SCRAPE_SOURCES)
+    all_articles = _dedupe_articles_by_url(rss_articles + scrape_articles)
+    logger.info(
+        "抓取完成：RSS %d 篇 + 補充爬蟲 %d 篇，合併去重後 %d 篇",
+        len(rss_articles),
+        len(scrape_articles),
+        len(all_articles),
+    )
 
     # ── 步驟 2：過濾已存在文章 ────────────────────────────────────
     logger.info("步驟 2/3：過濾已存在的文章…")
@@ -141,12 +168,16 @@ def run_pipeline(max_articles: int = 50) -> int:
             # 相關度篩選
             score = ai_data.get("relevance_score", 0)
             if score < relevance_threshold:
-                logger.info("  ✗ 相關度過低（%d < %d），跳過", score, relevance_threshold)
+                logger.info(
+                    "  ✗ 相關度過低（%d < %d），跳過", score, relevance_threshold
+                )
                 skipped_count += 1
                 continue
 
             # 建立資料庫記錄
-            translated_title = ai_data.get("translated_title") or article["original_title"]
+            translated_title = (
+                ai_data.get("translated_title") or article["original_title"]
+            )
             slug = ensure_unique_slug(
                 generate_slug(article["original_title"], article["source_url"]),
                 storage,

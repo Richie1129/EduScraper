@@ -46,3 +46,6 @@ frontend/.vercel
 # OS
 .DS_Store
 Thumbs.db
+
+# Markdown
+pipeline-run.md

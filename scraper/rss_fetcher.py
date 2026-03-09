@@ -18,22 +18,23 @@ def fetch_rss_feed(source: Dict) -> List[Dict]:
     """從單一 RSS 來源抓取文章列表。"""
     articles = []
     source_name = source.get("name", "Unknown")
+    max_items = int(source.get("max_items", 0))
 
     try:
         feed = feedparser.parse(source["url"])
 
         if feed.bozo and feed.bozo_exception:
-            logger.warning(
-                "Feed 解析警告 [%s]: %s", source_name, feed.bozo_exception
-            )
+            logger.warning("Feed 解析警告 [%s]: %s", source_name, feed.bozo_exception)
 
         if not feed.entries:
             logger.info("來源 [%s] 沒有新文章", source_name)
             return articles
 
         for entry in feed.entries:
-            title = entry.get("title", "").strip()
-            url = entry.get("link", "").strip()
+            raw_title = entry.get("title")
+            raw_url = entry.get("link")
+            title = raw_title.strip() if isinstance(raw_title, str) else ""
+            url = raw_url.strip() if isinstance(raw_url, str) else ""
 
             if not title or not url:
                 continue
@@ -48,6 +49,9 @@ def fetch_rss_feed(source: Dict) -> List[Dict]:
                 "tags": list(source.get("tags", [])),
             }
             articles.append(article)
+
+            if max_items and len(articles) >= max_items:
+                break
 
         logger.info("來源 [%s] 抓取到 %d 篇文章", source_name, len(articles))
 
@@ -75,13 +79,12 @@ def fetch_all_feeds(sources: List[Dict]) -> List[Dict]:
             seen.add(url)
             deduped.append(article)
 
-    logger.info(
-        "共抓取 %d 篇（去重後 %d 篇）", len(all_articles), len(deduped)
-    )
+    logger.info("共抓取 %d 篇（去重後 %d 篇）", len(all_articles), len(deduped))
     return deduped
 
 
 # ── 私有輔助函式 ──────────────────────────────────────────────────
+
 
 def _extract_abstract(entry) -> str:
     """從 Feed Entry 中提取摘要文字，去除 HTML 標籤。"""
@@ -101,11 +104,7 @@ def _extract_authors(entry) -> List[str]:
     authors: List[str] = []
 
     if hasattr(entry, "authors") and entry.authors:
-        authors = [
-            a.get("name", "").strip()
-            for a in entry.authors
-            if a.get("name")
-        ]
+        authors = [a.get("name", "").strip() for a in entry.authors if a.get("name")]
     elif hasattr(entry, "author") and entry.author:
         authors = [entry.author.strip()]
     elif hasattr(entry, "author_detail") and entry.author_detail:

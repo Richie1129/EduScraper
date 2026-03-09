@@ -5,7 +5,8 @@
 
 import asyncio
 import logging
-from typing import Optional
+import time
+from typing import Dict, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -39,6 +40,47 @@ def scrape_url(url: str, use_playwright: bool = False) -> Optional[dict]:
     if use_playwright:
         return asyncio.run(_scrape_dynamic(url))
     return _scrape_static(url)
+
+
+def fetch_scrape_source(source: Dict) -> List[Dict]:
+    """從單一非 RSS 來源抓取文章列表。"""
+    source_name = source.get("name", "Unknown")
+    source_url = source.get("url", "")
+
+    try:
+        if "eric.ed.gov" in source_url:
+            articles = _fetch_eric_search_results(source)
+        else:
+            logger.warning("尚未支援的爬取來源 [%s]", source_name)
+            articles = []
+
+        logger.info("來源 [%s] 抓取到 %d 篇文章", source_name, len(articles))
+        return articles
+    except Exception as exc:
+        logger.error("抓取來源 [%s] 失敗: %s", source_name, exc, exc_info=True)
+        return []
+
+
+def fetch_all_scrape_sources(sources: List[Dict]) -> List[Dict]:
+    """從所有非 RSS 來源抓取文章，並依 source_url 去重。"""
+    all_articles: List[Dict] = []
+
+    for source in sources:
+        articles = fetch_scrape_source(source)
+        all_articles.extend(articles)
+        time.sleep(2)
+
+    seen: set = set()
+    deduped: List[Dict] = []
+    for article in all_articles:
+        url = article.get("source_url")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(article)
+
+    logger.info("補充爬蟲共抓取 %d 篇（去重後 %d 篇）", len(all_articles), len(deduped))
+    return deduped
 
 
 def _scrape_static(url: str) -> Optional[dict]:
@@ -122,3 +164,74 @@ async def _scrape_dynamic(url: str) -> Optional[dict]:
     except Exception as exc:
         logger.error("動態爬取失敗 [%s]: %s", url, exc, exc_info=True)
         return None
+
+
+def _fetch_eric_search_results(source: Dict) -> List[Dict]:
+    """透過 ERIC API 抓取搜尋結果。"""
+    max_items = int(source.get("max_items", 3))
+    query = source.get("query", "").strip()
+    if not query:
+        logger.warning("ERIC 來源 [%s] 缺少 query 參數", source.get("name", "ERIC"))
+        return []
+
+    response = requests.get(
+        "https://api.ies.ed.gov/eric/",
+        headers=_HEADERS,
+        params={
+            "search": query,
+            "rows": max_items,
+            "format": "json",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    payload = response.json()
+    docs = payload.get("response", {}).get("docs", [])
+    articles = [_build_eric_article(doc, source) for doc in docs]
+    articles = [article for article in articles if article]
+    logger.info(
+        "ERIC 來源 [%s] 解析到 %d 個候選結果",
+        source.get("name", "ERIC"),
+        len(articles),
+    )
+    return articles
+
+
+def _build_eric_article(doc: Dict, source: Dict) -> Optional[Dict]:
+    """將 ERIC API 文件轉為 pipeline 可用格式。"""
+    eric_id = doc.get("id", "")
+    title = _clean_text(doc.get("title", ""))
+
+    if not eric_id or not title:
+        return None
+
+    description = _clean_text(doc.get("description", ""))[:3000]
+    authors = [author for author in doc.get("author", []) if isinstance(author, str)][
+        :5
+    ]
+    year = doc.get("publicationdateyear")
+    published_at = f"{year}-01-01T00:00:00+00:00" if year else None
+
+    subject_tags = [tag for tag in doc.get("subject", []) if isinstance(tag, str)][:3]
+    tags = list(dict.fromkeys(list(source.get("tags", [])) + subject_tags))[:5]
+
+    return {
+        "original_title": title,
+        "source_url": f"https://eric.ed.gov/?id={eric_id}",
+        "source_name": source.get("name", "ERIC"),
+        "original_abstract": description,
+        "authors": authors,
+        "published_at": published_at,
+        "tags": tags,
+    }
+
+
+def _clean_text(text: str) -> str:
+    """整理空白與常見 HTML 實體。"""
+    if not text:
+        return ""
+
+    cleaned = BeautifulSoup(text, "lxml").get_text(" ", strip=True)
+    cleaned = " ".join(cleaned.split())
+    return cleaned.strip()

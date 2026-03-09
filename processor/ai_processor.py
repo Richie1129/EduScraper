@@ -20,10 +20,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+_FAST_FALLBACK_FINISH_REASONS = {"length"}
+
 
 def _clean_trailing_commas(text: str) -> str:
     """移除 JSON 字串中的尾隨逗號（陣列或物件最後一個元素後的逗號）。"""
-    return re.sub(r',(\s*[}\]])', r'\1', text)
+    return re.sub(r",(\s*[}\]])", r"\1", text)
 
 
 def _extract_json(text: str) -> dict:
@@ -32,6 +34,7 @@ def _extract_json(text: str) -> dict:
     依序嘗試：直接解析 → markdown code block → 首尾 { } 配對。
     支援帶尾隨逗號的非標準 JSON。
     """
+
     def try_loads(s: str) -> dict:
         try:
             return json.loads(s)
@@ -47,7 +50,7 @@ def _extract_json(text: str) -> dict:
         pass
 
     # 2. 嘗試 ```json ... ``` 或 ``` ... ``` 代碼塊
-    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if match:
         try:
             return try_loads(match.group(1))
@@ -55,15 +58,36 @@ def _extract_json(text: str) -> dict:
             pass
 
     # 3. 提取文字中第一個 { 到最後一個 } 之間的內容
-    start = text.find('{')
-    end = text.rfind('}')
+    start = text.find("{")
+    end = text.rfind("}")
     if start != -1 and end > start:
         try:
-            return try_loads(text[start:end + 1])
+            return try_loads(text[start : end + 1])
         except json.JSONDecodeError:
             pass
 
     raise json.JSONDecodeError("無法從回應中提取有效 JSON", text, 0)
+
+
+def _should_fast_fallback_empty_response(finish_reason: Optional[str]) -> bool:
+    """空回應且顯示被截斷時，直接切換下一台伺服器。"""
+    return finish_reason in _FAST_FALLBACK_FINISH_REASONS
+
+
+def _should_fast_fallback_json_error(
+    raw_content: Optional[str], finish_reason: Optional[str]
+) -> bool:
+    """當回應明顯因長度截斷而導致 JSON 不完整時，直接 fallback。"""
+    if finish_reason not in _FAST_FALLBACK_FINISH_REASONS or not raw_content:
+        return False
+
+    stripped = raw_content.strip()
+    if not stripped:
+        return True
+
+    open_braces = stripped.count("{")
+    close_braces = stripped.count("}")
+    return open_braces > close_braces
 
 
 # vLLM 回應必須包含這些欄位
@@ -112,12 +136,17 @@ class VLLMProcessor:
             " → ".join(s["label"] for s in servers),
         )
 
-    def _try_server(self, server: dict, prompt: str, title_preview: str) -> Optional[dict]:
+    def _try_server(
+        self, server: dict, prompt: str, title_preview: str
+    ) -> Optional[dict]:
         """對單一伺服器最多重試 3 次，成功回傳結構化資料，失敗回傳 None。"""
-        client = OpenAI(base_url=server["base_url"], api_key=server["api_key"] or "dummy")
+        client = OpenAI(
+            base_url=server["base_url"], api_key=server["api_key"] or "dummy"
+        )
         model: str = server["model"]
         label: str = server["label"]
         raw_content: Optional[str] = None
+        finish_reason: Optional[str] = None
 
         for attempt in range(1, 4):
             try:
@@ -137,8 +166,18 @@ class VLLMProcessor:
                 if not raw_content:
                     logger.warning(
                         "[%s] 回應內容為空（finish_reason=%s）（第 %d 次）文章：%s",
-                        label, finish_reason, attempt, title_preview,
+                        label,
+                        finish_reason,
+                        attempt,
+                        title_preview,
                     )
+                    if _should_fast_fallback_empty_response(finish_reason):
+                        logger.warning(
+                            "[%s] 偵測到回應因長度截斷，直接切換下一台伺服器：%s",
+                            label,
+                            title_preview,
+                        )
+                        break
                     if attempt < 3:
                         time.sleep(2)
                     continue
@@ -149,7 +188,10 @@ class VLLMProcessor:
                 if missing:
                     logger.warning(
                         "[%s] 回應缺少欄位 %s，文章：%s（第 %d 次）",
-                        label, missing, title_preview, attempt,
+                        label,
+                        missing,
+                        title_preview,
+                        attempt,
                     )
                     if attempt < 3:
                         time.sleep(2)
@@ -179,23 +221,39 @@ class VLLMProcessor:
             except json.JSONDecodeError as exc:
                 logger.warning(
                     "[%s] JSON 解析失敗（第 %d 次）文章：%s — %s\n  回應前300字：%s",
-                    label, attempt, title_preview, exc,
+                    label,
+                    attempt,
+                    title_preview,
+                    exc,
                     raw_content[:300] if raw_content else "(空回應)",
                 )
+                if _should_fast_fallback_json_error(raw_content, finish_reason):
+                    logger.warning(
+                        "[%s] 偵測到 JSON 因長度截斷不完整，直接切換下一台伺服器：%s",
+                        label,
+                        title_preview,
+                    )
+                    break
                 if attempt < 3:
                     time.sleep(2)
 
             except (RateLimitError, APITimeoutError) as exc:
                 logger.warning(
                     "[%s] 速率限制或逾時（第 %d 次）文章：%s — %s",
-                    label, attempt, title_preview, exc,
+                    label,
+                    attempt,
+                    title_preview,
+                    exc,
                 )
                 time.sleep(10 * attempt)
 
             except APIError as exc:
                 logger.error(
                     "[%s] API 錯誤（第 %d 次）文章：%s — %s",
-                    label, attempt, title_preview, exc,
+                    label,
+                    attempt,
+                    title_preview,
+                    exc,
                 )
                 if attempt < 3:
                     time.sleep(5)
@@ -203,7 +261,11 @@ class VLLMProcessor:
             except Exception as exc:
                 logger.error(
                     "[%s] 未預期錯誤（第 %d 次）文章：%s — %s",
-                    label, attempt, title_preview, exc, exc_info=True,
+                    label,
+                    attempt,
+                    title_preview,
+                    exc,
+                    exc_info=True,
                 )
                 break
 
