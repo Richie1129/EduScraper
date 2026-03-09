@@ -37,7 +37,7 @@ export async function getArticles(
     .from("articles")
     .select("*", { count: "exact" })
     .eq("is_published", true)
-    .order("published_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .range(from, to);
 
   if (tag) {
@@ -80,16 +80,16 @@ export async function getArticleBySlug(slug: string): Promise<Article | null> {
  * 取得所有 slug（供 generateStaticParams 使用）。
  */
 export async function getAllSlugs(): Promise<
-  Array<{ slug: string; published_at: string }>
+  Array<{ slug: string; created_at: string }>
 > {
   const supabase = getClient();
   if (!supabase) return [];
 
   const { data, error } = await supabase
     .from("articles")
-    .select("slug, published_at")
+    .select("slug, created_at")
     .eq("is_published", true)
-    .order("published_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error || !data) return [];
   return data;

@@ -8,9 +8,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slugs = await getAllSlugs();
 
   const articleUrls: MetadataRoute.Sitemap = slugs.map(
-    ({ slug, published_at }) => ({
+    ({ slug, created_at }) => ({
       url: `${siteUrl}/articles/${slug}`,
-      lastModified: new Date(published_at),
+      lastModified: new Date(created_at),
       changeFrequency: "monthly",
       priority: 0.7,
     })

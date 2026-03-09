@@ -69,13 +69,11 @@ class SupabaseStorage:
         回傳插入後的資料列（含資料庫自動生成欄位），失敗時回傳 None。
         """
         try:
-            response = (
-                self.client.table("articles")
-                .insert(article_data)
-                .execute()
-            )
+            response = self.client.table("articles").insert(article_data).execute()
             if response.data:
-                logger.info("文章已儲存：%s", article_data.get("translated_title", "")[:60])
+                logger.info(
+                    "文章已儲存：%s", article_data.get("translated_title", "")[:60]
+                )
                 return response.data[0]
             return None
         except Exception as exc:
@@ -101,7 +99,7 @@ class SupabaseStorage:
                 self.client.table("articles")
                 .select("*", count="exact")
                 .eq("is_published", True)
-                .order("published_at", desc=True)
+                .order("created_at", desc=True)
             )
 
             if tag:
@@ -135,13 +133,13 @@ class SupabaseStorage:
             return None
 
     def get_all_slugs(self) -> List[dict]:
-        """取得所有已發布文章的 slug 與 published_at（供 SSG 使用）。"""
+        """取得所有已發布文章的 slug 與 created_at（供 SSG 使用）。"""
         try:
             response = (
                 self.client.table("articles")
-                .select("slug, published_at")
+                .select("slug, created_at")
                 .eq("is_published", True)
-                .order("published_at", desc=True)
+                .order("created_at", desc=True)
                 .execute()
             )
             return response.data or []
