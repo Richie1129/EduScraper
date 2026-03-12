@@ -41,11 +41,11 @@ export default function NewsletterForm() {
   };
 
   return (
-    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-8 text-white">
+    <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-white shadow-[0_24px_80px_-34px_rgba(37,99,235,0.55)] dark:from-blue-700 dark:to-slate-900">
       <div className="text-center mb-6">
         <FiMail className="w-10 h-10 mx-auto mb-2 text-blue-200" aria-hidden="true" />
         <h2 className="text-2xl font-extrabold mb-2">每週精選研究電子報</h2>
-        <p className="text-blue-100 text-sm leading-relaxed max-w-md mx-auto">
+        <p className="mx-auto max-w-md text-sm leading-relaxed text-blue-100">
           每週五信箱收到精選 5 篇教育科技重點研究摘要，零時間壓力掌握學術前沿。
         </p>
       </div>
@@ -72,12 +72,12 @@ export default function NewsletterForm() {
             placeholder="your@email.com"
             required
             disabled={status === "loading"}
-            className="flex-1 px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/60 disabled:opacity-60"
+            className="flex-1 rounded-xl border border-white/30 bg-white/20 px-4 py-3 text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white/60 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={status === "loading"}
-            className="px-6 py-3 bg-white text-blue-700 font-bold rounded-xl hover:bg-blue-50 active:scale-95 transition-all disabled:opacity-60 whitespace-nowrap"
+            className="whitespace-nowrap rounded-xl bg-white px-6 py-3 font-bold text-blue-700 transition-all hover:bg-blue-50 active:scale-95 disabled:opacity-60 dark:bg-slate-100 dark:text-blue-800 dark:hover:bg-white"
           >
             {status === "loading" ? "訂閱中…" : "免費訂閱"}
           </button>

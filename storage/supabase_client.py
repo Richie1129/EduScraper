@@ -14,6 +14,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+_GENERIC_AI_HIGHLIGHT_REASON = (
+    "AI 判定這一點重要，因為它直接影響讀者理解本研究的核心價值。"
+)
+
 
 class SupabaseStorage:
     """封裝 Supabase 的文章與訂閱者資料表操作。"""
@@ -77,6 +81,27 @@ class SupabaseStorage:
                 return response.data[0]
             return None
         except Exception as exc:
+            if "ai_highlights" in article_data and "ai_highlights" in str(exc):
+                logger.warning("articles 資料表尚未加入 ai_highlights 欄位，改以相容模式寫入")
+                fallback_article = {
+                    key: value
+                    for key, value in article_data.items()
+                    if key != "ai_highlights"
+                }
+                try:
+                    response = self.client.table("articles").insert(fallback_article).execute()
+                    if response.data:
+                        logger.info(
+                            "文章已以相容模式儲存：%s",
+                            article_data.get("translated_title", "")[:60],
+                        )
+                        return response.data[0]
+                except Exception as retry_exc:
+                    logger.error(
+                        "相容模式插入文章仍失敗 [%s]: %s",
+                        article_data.get("source_url", ""),
+                        retry_exc,
+                    )
             logger.error(
                 "插入文章失敗 [%s]: %s",
                 article_data.get("source_url", ""),
@@ -146,6 +171,89 @@ class SupabaseStorage:
         except Exception as exc:
             logger.error("取得 slug 列表失敗: %s", exc)
             return []
+
+    def get_articles_for_ai_highlights_backfill(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        refresh_all: bool = False,
+    ) -> List[dict]:
+        """取得可用於 ai_highlights 回填的文章資料。"""
+        candidates: List[dict] = []
+        cursor = offset
+        window_size = max(limit * 3, limit, 9)
+
+        while len(candidates) < limit:
+            try:
+                response = (
+                    self.client.table("articles")
+                    .select("*")
+                    .eq("is_published", True)
+                    .order("created_at", desc=True)
+                    .range(cursor, cursor + window_size - 1)
+                    .execute()
+                )
+            except Exception as exc:
+                logger.error("取得 ai_highlights 待補文章失敗: %s", exc)
+                return candidates
+
+            articles = response.data or []
+            if not articles:
+                break
+
+            if refresh_all:
+                candidates.extend(articles)
+            else:
+                for article in articles:
+                    highlights = article.get("ai_highlights")
+                    if not isinstance(highlights, list) or len(highlights) < 2:
+                        candidates.append(article)
+                        continue
+
+                    invalid_items = [
+                        item
+                        for item in highlights
+                        if not isinstance(item, dict)
+                        or not str(item.get("point") or "").strip()
+                        or not str(item.get("reason") or "").strip()
+                        or str(item.get("reason") or "").strip()
+                        == _GENERIC_AI_HIGHLIGHT_REASON
+                    ]
+                    if invalid_items:
+                        candidates.append(article)
+
+                    if len(candidates) >= limit:
+                        break
+
+            if len(articles) < window_size:
+                break
+
+            cursor += window_size
+
+        return candidates[:limit]
+
+    def update_article_ai_highlights(
+        self,
+        article_id: str,
+        ai_highlights: list[dict],
+        model_name: Optional[str] = None,
+    ) -> bool:
+        """更新單篇文章的 ai_highlights。"""
+        payload = {"ai_highlights": ai_highlights}
+        if model_name:
+            payload["model_name"] = model_name
+
+        try:
+            response = (
+                self.client.table("articles")
+                .update(payload)
+                .eq("id", article_id)
+                .execute()
+            )
+            return bool(response.data)
+        except Exception as exc:
+            logger.error("更新文章 ai_highlights 失敗 [%s]: %s", article_id, exc)
+            return False
 
     # ── Discovery Reports 操作 ────────────────────────────────────
 

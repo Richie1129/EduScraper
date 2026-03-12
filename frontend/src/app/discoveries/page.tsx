@@ -20,22 +20,22 @@ export default async function DiscoveriesPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <section className="rounded-[36px] border border-stone-200 bg-[linear-gradient(145deg,_#fffef9,_#fff)] p-8 shadow-[0_24px_80px_-36px_rgba(28,25,23,0.35)] sm:p-10">
+      <section className="rounded-[36px] border border-stone-200 bg-[linear-gradient(145deg,_#fffef9,_#fff)] p-8 shadow-[0_24px_80px_-36px_rgba(28,25,23,0.35)] dark:border-slate-800 dark:bg-[linear-gradient(145deg,_rgba(30,41,59,0.96),_rgba(15,23,42,1))] sm:p-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
               <FiCompass className="h-3.5 w-3.5" aria-hidden="true" /> Discovery Reports
             </div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-stone-900">
+            <h1 className="text-4xl font-extrabold tracking-tight text-stone-900 dark:text-white">
               新聞統整發現引擎
             </h1>
-            <p className="mt-3 max-w-3xl text-base leading-8 text-stone-600">
+            <p className="mt-3 max-w-3xl text-base leading-8 text-stone-600 dark:text-slate-300">
               每篇報導都由搜尋 API 擷取來源、再交由 LLM 產生句句附註的 Markdown 綜合報導。你可以直接點擊文內 [1] 引用，回到原始來源驗證敘述。
             </p>
           </div>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 hover:text-stone-900"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 hover:text-stone-900 dark:text-slate-300 dark:hover:text-white"
           >
             <FiArrowLeft className="h-4 w-4" aria-hidden="true" /> 返回首頁
           </Link>

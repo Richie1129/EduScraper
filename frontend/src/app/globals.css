@@ -6,10 +6,19 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
-    @apply text-gray-900 bg-gray-50;
+    @apply bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
+  }
+
+  ::selection {
+    @apply bg-blue-200 text-slate-900 dark:bg-blue-500/40 dark:text-white;
   }
 }
 

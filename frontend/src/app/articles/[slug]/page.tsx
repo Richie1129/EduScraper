@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getArticleBySlug, getAllSlugs } from "@/lib/supabase";
 // import AdSense from "@/components/AdSense";
+import AIHighlights from "@/components/AIHighlights";
 import NewsletterForm from "@/components/NewsletterForm";
 import { FiBookmark, FiZap, FiExternalLink } from "react-icons/fi";
+import { deriveAIHighlights } from "@/lib/aiHighlights";
 
 // ISR：文章頁面每 24 小時重新驗證
 export const revalidate = 86400;
@@ -47,6 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ArticlePage({ params }: Props) {
   const article = await getArticleBySlug(params.slug);
   if (!article) notFound();
+  const aiHighlights = deriveAIHighlights(article);
 
   const publishedDate = new Date(article.published_at).toLocaleDateString(
     "zh-TW",
@@ -88,12 +91,12 @@ export default async function ArticlePage({ params }: Props) {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* 麵包屑 */}
-        <nav aria-label="breadcrumb" className="text-sm text-gray-500 mb-6">
-          <Link href="/" className="hover:text-blue-600 transition-colors">
+        <nav aria-label="breadcrumb" className="mb-6 text-sm text-slate-500 dark:text-slate-400">
+          <Link href="/" className="transition-colors hover:text-blue-600 dark:hover:text-blue-300">
             首頁
           </Link>
           <span className="mx-2 text-gray-300">/</span>
-          <span className="text-gray-800">研究速報</span>
+          <span className="text-slate-800 dark:text-slate-200">研究速報</span>
         </nav>
 
         <article>
@@ -105,20 +108,20 @@ export default async function ArticlePage({ params }: Props) {
                 <Link
                   key={tag}
                   href={`/?tag=${encodeURIComponent(tag)}`}
-                  className="text-xs font-semibold px-3 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors"
+                  className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
                 >
                   {tag}
                 </Link>
               ))}
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 leading-tight mb-4">
+            <h1 className="mb-4 text-3xl font-extrabold leading-tight text-slate-900 dark:text-white sm:text-4xl">
               {article.translated_title}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
               {article.source_name && (
-                <span className="font-semibold text-gray-700">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
                   {article.source_name}
                 </span>
               )}
@@ -130,11 +133,13 @@ export default async function ArticlePage({ params }: Props) {
           </header>
 
           {/* 一句話摘要（亮點區塊） */}
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-5 rounded-r-xl mb-8">
-            <p className="text-blue-900 font-semibold leading-relaxed text-base sm:text-lg">
+          <div className="mb-8 rounded-r-xl border-l-4 border-blue-500 bg-blue-50 p-5 dark:bg-blue-500/10">
+            <p className="text-base font-semibold leading-relaxed text-blue-900 dark:text-blue-100 sm:text-lg">
               {article.one_sentence_summary}
             </p>
           </div>
+
+          <AIHighlights highlights={aiHighlights} />
 
           {/* 上方廣告 */}
           {/* <AdSense slot="3456789012" /> */}
@@ -144,17 +149,17 @@ export default async function ArticlePage({ params }: Props) {
             <section className="mb-10" aria-labelledby="findings-heading">
               <h2
                 id="findings-heading"
-                className="text-xl font-bold text-gray-900 mb-5 flex items-center gap-2"
+                className="mb-5 flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white"
               >
                 <FiBookmark className="text-blue-600" aria-hidden="true" /> 核心研究發現
               </h2>
               <ol className="space-y-4">
                 {article.key_findings.map((finding, index) => (
                   <li key={index} className="flex gap-4 items-start">
-                    <span className="flex-shrink-0 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
                       {index + 1}
                     </span>
-                    <p className="text-gray-700 leading-relaxed pt-0.5">
+                    <p className="pt-0.5 leading-relaxed text-slate-700 dark:text-slate-300">
                       {finding}
                     </p>
                   </li>
@@ -168,12 +173,12 @@ export default async function ArticlePage({ params }: Props) {
             <section className="mb-10" aria-labelledby="insights-heading">
               <h2
                 id="insights-heading"
-                className="text-xl font-bold text-gray-900 mb-5 flex items-center gap-2"
+                className="mb-5 flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white"
               >
                 <FiZap className="text-yellow-500" aria-hidden="true" /> 對教育工作者的啟發
               </h2>
-              <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-                <p className="text-gray-800 leading-relaxed">
+              <div className="rounded-xl border border-green-200 bg-green-50 p-6 dark:border-green-500/20 dark:bg-green-500/10">
+                <p className="leading-relaxed text-slate-800 dark:text-slate-200">
                   {article.practical_insights}
                 </p>
               </div>
@@ -184,11 +189,11 @@ export default async function ArticlePage({ params }: Props) {
           {/* <AdSense slot="4567890123" /> */}
 
           {/* 原始文獻資訊 */}
-          <section className="mb-10 p-6 bg-gray-50 border border-gray-200 rounded-xl">
-            <h2 className="text-base font-bold text-gray-900 mb-4">
+          <section className="mb-10 rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900/70">
+            <h2 className="mb-4 text-base font-bold text-slate-900 dark:text-white">
               原始文獻資訊
             </h2>
-            <dl className="space-y-2 text-sm text-gray-700">
+            <dl className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
               <div>
                 <dt className="font-semibold inline">英文標題：</dt>
                 <dd className="inline">{article.original_title}</dd>
@@ -206,7 +211,7 @@ export default async function ArticlePage({ params }: Props) {
               {article.model_name && (
                 <div>
                   <dt className="font-semibold inline">AI 摘要模型：</dt>
-                  <dd className="inline font-mono text-xs bg-gray-200 px-1.5 py-0.5 rounded">{article.model_name}</dd>
+                  <dd className="inline rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">{article.model_name}</dd>
                 </div>
               )}
             </dl>
@@ -214,7 +219,7 @@ export default async function ArticlePage({ params }: Props) {
               href={article.source_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
             >
               閱讀原文
               <FiExternalLink className="h-4 w-4" aria-hidden="true" />

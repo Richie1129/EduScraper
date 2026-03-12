@@ -4,6 +4,9 @@ const nextConfig = {
   // 若需要完全靜態匯出，可取消下列注釋：
   // output: "export",
 
+  // 允許在驗證或特殊部署情境下切換建構輸出目錄，避開被污染的 .next。
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   images: {
     remotePatterns: [
       {

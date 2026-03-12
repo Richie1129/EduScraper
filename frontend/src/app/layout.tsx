@@ -57,10 +57,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const adsenseId = process.env.NEXT_PUBLIC_ADSENSE_ID;
+  const themeInitScript = `
+    (() => {
+      try {
+        const storageKey = "eduinsight-theme";
+        const stored = window.localStorage.getItem(storageKey);
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = stored === "dark" || stored === "light" ? stored : (prefersDark ? "dark" : "light");
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.dataset.theme = theme;
+      } catch (error) {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  `;
 
   return (
-    <html lang="zh-TW" className={inter.variable}>
+    <html lang="zh-TW" className={inter.variable} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {adsenseId && (
           <Script
             async
@@ -70,9 +86,9 @@ export default function RootLayout({
           />
         )}
       </head>
-      <body className="min-h-screen flex flex-col">
+      <body className="min-h-screen flex flex-col bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
         <Header />
-        <main className="flex-1 bg-gray-50">{children}</main>
+        <main className="flex-1 bg-slate-50 transition-colors duration-300 dark:bg-slate-950">{children}</main>
         <Footer />
       </body>
     </html>

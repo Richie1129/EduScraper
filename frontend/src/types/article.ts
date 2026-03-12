@@ -1,3 +1,8 @@
+export interface AIHighlight {
+  point: string;
+  reason: string;
+}
+
 export interface Article {
   id: string;
   slug: string;
@@ -9,6 +14,7 @@ export interface Article {
   original_abstract: string;
   one_sentence_summary: string;
   key_findings: string[];
+  ai_highlights?: AIHighlight[];
   practical_insights: string;
   research_method: string | null;
   target_audience: string | null;

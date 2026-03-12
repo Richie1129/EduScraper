@@ -1,18 +1,12 @@
 import Link from "next/link";
 import { FiBook, FiAlertTriangle } from "react-icons/fi";
+import { getPopularTags } from "@/lib/supabase";
 
-const TOPIC_LINKS = [
-  { href: "/?tag=SRL", label: "自主學習 (SRL)" },
-  { href: "/?tag=PBL", label: "專題式學習 (PBL)" },
-  { href: "/?tag=AI", label: "AI 教育應用" },
-  { href: "/?tag=edtech", label: "教育科技 (EdTech)" },
-  { href: "/?tag=assessment", label: "學習評量" },
-  { href: "/?tag=K-12", label: "K-12 教育" },
-];
+export default async function Footer() {
+  const topicLinks = await getPopularTags(6);
 
-export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-gray-400 mt-20">
+    <footer className="mt-20 border-t border-slate-200 bg-slate-900 text-slate-400 dark:border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 mb-10">
           {/* 品牌介紹 */}
@@ -35,17 +29,24 @@ export default function Footer() {
               主題分類
             </h3>
             <ul className="space-y-2">
-              {TOPIC_LINKS.map(({ href, label }) => (
+              {topicLinks.map(({ href, label, count }) => (
                 <li key={href}>
                   <Link
                     href={href}
-                    className="text-sm hover:text-white transition-colors"
+                    className="flex items-center justify-between gap-3 text-sm hover:text-white transition-colors"
                   >
-                    {label}
+                    <span>{label}</span>
+                    <span className="text-xs text-slate-500">{count}</span>
                   </Link>
                 </li>
               ))}
             </ul>
+            <Link
+              href="/topics"
+              className="mt-4 inline-flex text-sm font-semibold text-blue-300 transition-colors hover:text-white"
+            >
+              查看全部主題
+            </Link>
           </div>
 
           {/* 關於本站 */}
@@ -65,7 +66,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-gray-700 pt-8 text-center text-xs text-gray-600">
+        <div className="border-t border-slate-700 pt-8 text-center text-xs text-slate-500">
           © {new Date().getFullYear()} EduInsight. AI 摘要由大型語言模型生成，內容僅供參考。
         </div>
       </div>

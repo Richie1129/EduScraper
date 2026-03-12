@@ -12,7 +12,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
   );
 
   return (
-    <article className="bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
+    <article className="group relative flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
       <div className="p-6 flex flex-col flex-1">
         {/* 標籤列 */}
         <div className="flex flex-wrap gap-1.5 mb-3">
@@ -20,7 +20,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
             <Link
               key={tag}
               href={`/?tag=${encodeURIComponent(tag)}`}
-              className="text-xs font-semibold px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors"
+              className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
             >
               {tag}
             </Link>
@@ -29,19 +29,19 @@ export default function ArticleCard({ article }: ArticleCardProps) {
 
         {/* 標題 */}
         <Link href={`/articles/${article.slug}`} className="group mb-2">
-          <h2 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
+          <h2 className="line-clamp-2 text-base font-bold leading-snug text-slate-900 transition-colors group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-300">
             {article.translated_title}
           </h2>
         </Link>
 
         {/* 摘要 */}
-        <p className="text-gray-500 text-sm leading-relaxed flex-1 line-clamp-3">
+        <p className="line-clamp-3 flex-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {article.one_sentence_summary}
         </p>
 
         {/* 底部資訊列 */}
-        <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 gap-3">
-          <span className="font-medium text-gray-600 truncate max-w-[60%]">
+        <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+          <span className="max-w-[60%] truncate font-medium text-slate-600 dark:text-slate-300">
             {article.source_name}
           </span>
           <time dateTime={article.created_at}>{createdDate}</time>

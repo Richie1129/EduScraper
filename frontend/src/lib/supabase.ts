@@ -1,6 +1,11 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { Article, ArticleListResult } from "@/types/article";
 import type { DiscoveryReport } from "@/types/discovery";
+import {
+  buildPopularTopicTag,
+  PRIMARY_TOPIC_TAGS,
+  type PopularTopicTag,
+} from "@/lib/topicTags";
 
 // 懶惰初始化：建構期間若沒有設定環境變數，函式會直接回傳空結果
 let _client: SupabaseClient | null = null;
@@ -151,4 +156,53 @@ export async function getAllDiscoverySlugs(): Promise<
 
   if (error || !data) return [];
   return data;
+}
+
+export async function getPopularTags(
+  limit?: number
+): Promise<PopularTopicTag[]> {
+  const supabase = getClient();
+  if (!supabase) {
+    return PRIMARY_TOPIC_TAGS.slice(0, limit ?? PRIMARY_TOPIC_TAGS.length).map(
+      (tag) => ({ ...tag, count: 0 })
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("articles")
+    .select("tags")
+    .eq("is_published", true);
+
+  if (error || !data) {
+    if (error) {
+      console.error("[Supabase] getPopularTags error:", error.message);
+    }
+    return PRIMARY_TOPIC_TAGS.slice(0, limit ?? PRIMARY_TOPIC_TAGS.length).map(
+      (tag) => ({ ...tag, count: 0 })
+    );
+  }
+
+  const tagCounts = new Map<string, number>();
+  for (const row of data) {
+    for (const rawTag of row.tags ?? []) {
+      const normalizedTag = String(rawTag).trim().toLowerCase();
+      if (!normalizedTag) continue;
+      tagCounts.set(normalizedTag, (tagCounts.get(normalizedTag) ?? 0) + 1);
+    }
+  }
+
+  const sortedTags = Array.from(tagCounts.entries())
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0], "en");
+    })
+    .map(([value, count]) => buildPopularTopicTag(value, count));
+
+  if (sortedTags.length === 0) {
+    return PRIMARY_TOPIC_TAGS.slice(0, limit ?? PRIMARY_TOPIC_TAGS.length).map(
+      (tag) => ({ ...tag, count: 0 })
+    );
+  }
+
+  return typeof limit === "number" ? sortedTags.slice(0, limit) : sortedTags;
 }

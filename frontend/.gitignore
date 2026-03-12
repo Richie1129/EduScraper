@@ -1,5 +1,6 @@
 # Next.js 產物
 .next/
+.next-validation/
 out/
 
 # 依賴

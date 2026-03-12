@@ -172,6 +172,12 @@ docker-compose exec pipeline python -m pipeline.discovery
     "核心發現一",
     "核心發現二",
     "核心發現三"
+    ],
+    "ai_highlights": [
+        {
+            "point": "AI 判斷最值得先讀的重點",
+            "reason": "AI 為何覺得它重要，會顯示在文章 hover 提示中"
+        }
   ],
   "practical_insights": "對教育工作者的具體啟發（100字以內）",
   "tags": ["SRL", "metacognition", "K-12"],
@@ -194,6 +200,10 @@ docker-compose exec pipeline python -m pipeline.discovery
 - `source_references`：來源陣列，包含標題、網址、摘錄、favicon 與原始內容節錄
 - `coverage_date`：該篇統整覆蓋日期
 - `topic`：該篇統整主題
+
+### ai_highlights Migration
+
+若你只想補上文章的 `ai_highlights` 欄位，而不想重跑整份 schema，可直接把 [ai_highlights_migration.sql](ai_highlights_migration.sql) 貼進 Supabase SQL Editor 執行。
 
 ### 前端建構權限注意
 

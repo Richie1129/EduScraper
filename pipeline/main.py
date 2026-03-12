@@ -193,6 +193,7 @@ def run_pipeline(max_articles: int = 50) -> int:
                 "original_abstract": article.get("original_abstract", ""),
                 "one_sentence_summary": ai_data.get("one_sentence_summary", ""),
                 "key_findings": ai_data.get("key_findings", []),
+                "ai_highlights": ai_data.get("ai_highlights", []),
                 "research_method": ai_data.get("research_method", ""),
                 "target_audience": ai_data.get("target_audience", ""),
                 "practical_insights": ai_data.get("practical_insights", ""),

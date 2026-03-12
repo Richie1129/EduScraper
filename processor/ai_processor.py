@@ -14,7 +14,12 @@ from typing import Optional
 from openai import OpenAI, APIError, APITimeoutError, RateLimitError
 from dotenv import load_dotenv
 
-from .prompts import SYSTEM_PROMPT, build_analysis_prompt
+from .prompts import (
+    AI_HIGHLIGHTS_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    build_ai_highlights_backfill_prompt,
+    build_analysis_prompt,
+)
 
 load_dotenv()
 
@@ -95,6 +100,7 @@ _REQUIRED_FIELDS = {
     "translated_title",
     "one_sentence_summary",
     "key_findings",
+    "ai_highlights",
     "research_method",
     "target_audience",
     "practical_insights",
@@ -203,6 +209,38 @@ class VLLMProcessor:
                 else:
                     data["key_findings"] = [str(f) for f in findings[:5]]
 
+                highlights = data.get("ai_highlights", [])
+                normalized_highlights = []
+                if isinstance(highlights, list):
+                    for highlight in highlights[:4]:
+                        if not isinstance(highlight, dict):
+                            continue
+
+                        point = str(
+                            highlight.get("point") or highlight.get("finding") or ""
+                        ).strip()
+                        reason = str(
+                            highlight.get("reason")
+                            or highlight.get("why_it_matters")
+                            or ""
+                        ).strip()
+
+                        if point and reason:
+                            normalized_highlights.append(
+                                {"point": point, "reason": reason}
+                            )
+
+                if not normalized_highlights and data["key_findings"]:
+                    normalized_highlights = [
+                        {
+                            "point": finding,
+                            "reason": "AI 判定這一點重要，因為它直接影響讀者理解本研究的核心價值。",
+                        }
+                        for finding in data["key_findings"][:3]
+                    ]
+
+                data["ai_highlights"] = normalized_highlights
+
                 tags = data.get("tags", [])
                 if not isinstance(tags, list):
                     data["tags"] = []
@@ -287,4 +325,135 @@ class VLLMProcessor:
             logger.info("嘗試下一台伺服器（fallback）：%s", title_preview)
 
         logger.error("所有伺服器均失敗，已放棄：%s", title_preview)
+        return None
+
+    def process_ai_highlights(self, article: dict) -> Optional[dict]:
+        """僅為既有文章生成 ai_highlights。"""
+        prompt = build_ai_highlights_backfill_prompt(article)
+        title_preview = (
+            article.get("translated_title") or article.get("original_title", "")
+        )[:60]
+
+        for server in self._servers:
+            client = OpenAI(
+                base_url=server["base_url"], api_key=server["api_key"] or "dummy"
+            )
+            model: str = server["model"]
+            label: str = server["label"]
+            raw_content: Optional[str] = None
+            finish_reason: Optional[str] = None
+
+            for attempt in range(1, 4):
+                try:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": AI_HIGHLIGHTS_SYSTEM_PROMPT,
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.2,
+                        max_tokens=900,
+                    )
+
+                    raw_content = response.choices[0].message.content
+                    finish_reason = response.choices[0].finish_reason
+
+                    if not raw_content:
+                        logger.warning(
+                            "[%s] ai_highlights 回應為空（finish_reason=%s）（第 %d 次）文章：%s",
+                            label,
+                            finish_reason,
+                            attempt,
+                            title_preview,
+                        )
+                        if _should_fast_fallback_empty_response(finish_reason):
+                            break
+                        if attempt < 3:
+                            time.sleep(2)
+                        continue
+
+                    data = _extract_json(raw_content)
+                    highlights = data.get("ai_highlights", [])
+                    normalized_highlights = []
+
+                    if isinstance(highlights, list):
+                        for highlight in highlights[:3]:
+                            if not isinstance(highlight, dict):
+                                continue
+
+                            point = str(highlight.get("point") or "").strip()
+                            reason = str(highlight.get("reason") or "").strip()
+                            if point and reason:
+                                normalized_highlights.append(
+                                    {"point": point, "reason": reason}
+                                )
+
+                    if normalized_highlights:
+                        logger.debug("[%s] ai_highlights 生成成功：%s", label, title_preview)
+                        return {
+                            "ai_highlights": normalized_highlights,
+                            "model_name": model,
+                        }
+
+                    logger.warning(
+                        "[%s] ai_highlights 缺少有效內容（第 %d 次）文章：%s",
+                        label,
+                        attempt,
+                        title_preview,
+                    )
+                    if attempt < 3:
+                        time.sleep(2)
+
+                except json.JSONDecodeError as exc:
+                    logger.warning(
+                        "[%s] ai_highlights JSON 解析失敗（第 %d 次）文章：%s — %s\n  回應前300字：%s",
+                        label,
+                        attempt,
+                        title_preview,
+                        exc,
+                        raw_content[:300] if raw_content else "(空回應)",
+                    )
+                    if _should_fast_fallback_json_error(raw_content, finish_reason):
+                        break
+                    if attempt < 3:
+                        time.sleep(2)
+
+                except (RateLimitError, APITimeoutError) as exc:
+                    logger.warning(
+                        "[%s] ai_highlights 速率限制或逾時（第 %d 次）文章：%s — %s",
+                        label,
+                        attempt,
+                        title_preview,
+                        exc,
+                    )
+                    time.sleep(10 * attempt)
+
+                except APIError as exc:
+                    logger.error(
+                        "[%s] ai_highlights API 錯誤（第 %d 次）文章：%s — %s",
+                        label,
+                        attempt,
+                        title_preview,
+                        exc,
+                    )
+                    if attempt < 3:
+                        time.sleep(5)
+
+                except Exception as exc:
+                    logger.error(
+                        "[%s] ai_highlights 未預期錯誤（第 %d 次）文章：%s — %s",
+                        label,
+                        attempt,
+                        title_preview,
+                        exc,
+                        exc_info=True,
+                    )
+                    break
+
+            logger.info("ai_highlights 改用下一台伺服器（fallback）：%s", title_preview)
+
+        logger.error("所有伺服器均失敗，無法生成 ai_highlights：%s", title_preview)
         return None

@@ -19,6 +19,13 @@ DISCOVERY_SYSTEM_PROMPT = (
     "請嚴格輸出合法 JSON，不要輸出任何 JSON 以外的內容。"
 )
 
+AI_HIGHLIGHTS_SYSTEM_PROMPT = (
+  "你是一位擅長幫讀者抓重點的教育科技研究編輯。"
+  "你的工作不是重寫全文摘要，而是從既有文章資訊中挑出最值得優先注意的 2-3 個重點，"
+  "並清楚說明為什麼這些重點最值得先看。\n"
+  "請嚴格輸出合法 JSON，不要輸出任何 JSON 以外的內容。"
+)
+
 
 def build_analysis_prompt(article: dict) -> str:
     """
@@ -58,6 +65,16 @@ def build_analysis_prompt(article: dict) -> str:
     "第四個核心研究發現或重點（30-80字，清楚具體）",
     "第五個核心研究發現或重點（30-80字，清楚具體）"
   ],
+  "ai_highlights": [
+    {
+      "point": "AI 最推薦先讀的重點（25-60字）",
+      "reason": "說明 AI 為何認為這點值得優先注意，需根據文章內容與研究價值解釋（40-120字）"
+    },
+    {
+      "point": "第二個值得先掌握的重點（25-60字）",
+      "reason": "說明這點為何會影響讀者理解整篇文章或後續應用（40-120字）"
+    }
+  ],
   "research_method": "簡述研究方法或資料來源（例如：隨機對照實驗、問卷調查、系統性文獻回顧、案例研究等），60字以內",
   "target_audience": "此研究最適合哪些讀者或實務工作者參考（例如：K-12 教師、高等教育研究者、課程設計者、教育政策制定者等），40字以內",
   "practical_insights": "對實務教育工作者或課程設計者的具體啟發與可行建議（200字以內）",
@@ -67,12 +84,14 @@ def build_analysis_prompt(article: dict) -> str:
 
 注意事項：
 1. key_findings 必須恰好包含 5 個條目，每個條目獨立成一個有意義的句子
-2. research_method 若文章未明確說明方法，請根據內容合理推斷並說明
-3. target_audience 請具體指出最受益的受眾群體
-4. tags 使用英文小寫，最多 5 個，優先選用：SRL、PBL、AI、edtech、higher education、K-12、assessment、learning design、knowledge building、metacognition 等領域詞彙
-5. relevance_score 為 1-10 的整數：評估此文章與「教育科技、學習科學、SRL、PBL」的相關程度（1=完全無關，10=完全切題）
-6. 所有中文欄位**必須**使用繁體中文，不得使用簡體
-7. 輸出必須是合法的 JSON，不含任何多餘文字或 markdown 程式碼區塊"""
+2. ai_highlights 必須包含 2-3 個物件，每個物件都要有 point 與 reason 兩個欄位
+3. ai_highlights.reason 要回答「為什麼 AI 覺得這是重點」，不可只重複 point 本身
+4. research_method 若文章未明確說明方法，請根據內容合理推斷並說明
+5. target_audience 請具體指出最受益的受眾群體
+6. tags 使用英文小寫，最多 5 個，優先選用：SRL、PBL、AI、edtech、higher education、K-12、assessment、learning design、knowledge building、metacognition 等領域詞彙
+7. relevance_score 為 1-10 的整數：評估此文章與「教育科技、學習科學、SRL、PBL」的相關程度（1=完全無關，10=完全切題）
+8. 所有中文欄位**必須**使用繁體中文，不得使用簡體
+9. 輸出必須是合法的 JSON，不含任何多餘文字或 markdown 程式碼區塊"""
 
 
 def build_discovery_prompt(topic: str, query: str, sources: list[dict]) -> str:
@@ -130,3 +149,73 @@ URL: {url}
 參考資料：
 {joined_sources}
 """
+
+
+def build_ai_highlights_backfill_prompt(article: dict) -> str:
+    """根據既有文章資料，專門生成更完整的 ai_highlights。"""
+
+    original_title = article.get("original_title", "（無標題）")
+    translated_title = article.get("translated_title", "（無譯標）")
+    source_name = article.get("source_name", "（未知來源）")
+    original_abstract = article.get("original_abstract", "（無摘要）")
+    one_sentence_summary = article.get("one_sentence_summary", "（無一句摘要）")
+    research_method = article.get("research_method", "（未提供）")
+    target_audience = article.get("target_audience", "（未提供）")
+    practical_insights = article.get("practical_insights", "（未提供）")
+
+    key_findings = article.get("key_findings") or []
+    findings_block = "\n".join(
+        f"- {str(finding).strip()}" for finding in key_findings if str(finding).strip()
+    )
+    if not findings_block:
+        findings_block = "- （未提供）"
+
+    abstract_trimmed = (
+        original_abstract[:2200] if len(original_abstract) > 2200 else original_abstract
+    )
+
+    return f"""請根據以下已整理好的文章資訊，只產出更精煉、更有判斷力的 AI 重點。
+
+文章原標題：{original_title}
+文章譯標：{translated_title}
+來源：{source_name}
+
+摘要／內容：
+{abstract_trimmed}
+
+一句摘要：
+{one_sentence_summary}
+
+核心發現：
+{findings_block}
+
+研究方法：
+{research_method}
+
+適合讀者：
+{target_audience}
+
+實務啟發：
+{practical_insights}
+
+請輸出以下 JSON：
+{{
+  "ai_highlights": [
+    {{
+      "point": "最值得優先閱讀的重點，25-60 字",
+      "reason": "說明為什麼這一點會影響讀者理解整篇文章的價值、方法、結果或實際應用，45-120 字"
+    }},
+    {{
+      "point": "第二個應先掌握的重點，25-60 字",
+      "reason": "說明這個重點之所以重要的原因，不能只是換句話重述 point，45-120 字"
+    }}
+  ]
+}}
+
+注意事項：
+1. 只能輸出 ai_highlights，不要重複輸出其他欄位。
+2. ai_highlights 必須有 2-3 個物件，每個都要包含 point 與 reason。
+3. point 要具體，避免空泛形容詞；reason 要講清楚「為什麼值得先看」。
+4. 優先挑選最能代表研究方法、主要發現、實際應用價值或讀者決策意義的重點。
+5. 所有文字都必須使用繁體中文。
+6. 輸出必須是合法 JSON，不含任何多餘文字。"""
