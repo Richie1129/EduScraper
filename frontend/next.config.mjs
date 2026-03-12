@@ -31,6 +31,19 @@ const nextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              // Next.js 需要 unsafe-inline / unsafe-eval；AdSense 需要額外來源
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://adservice.google.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https: blob:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.supabase.co",
+              "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com",
+            ].join("; "),
+          },
         ],
       },
     ];

@@ -36,8 +36,12 @@ COPY --from=frontend-builder /app/frontend/package.json ./frontend/package.json
 # 複製 supervisord 設定
 COPY supervisord.conf /etc/supervisor/conf.d/eduscraper.conf
 
-# 建立日誌目錄
-RUN mkdir -p /app/logs
+# 建立日誌目錄，並新增非 root 執行使用者
+RUN mkdir -p /app/logs && \
+    useradd -r -u 1001 -s /sbin/nologin appuser && \
+    chown -R appuser:appuser /app /etc/supervisor/conf.d
+
+USER appuser
 
 EXPOSE 3000
 
