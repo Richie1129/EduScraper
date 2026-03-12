@@ -6,6 +6,7 @@ import { FiBook, FiMenu, FiX } from "react-icons/fi";
 
 const NAV_LINKS = [
   { href: "/", label: "最新研究" },
+  { href: "/discoveries", label: "新聞統整" },
   { href: "/?tag=SRL", label: "自主學習" },
   { href: "/?tag=PBL", label: "專題學習" },
   { href: "/?tag=AI", label: "AI 教育" },

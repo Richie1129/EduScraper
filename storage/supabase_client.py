@@ -146,3 +146,87 @@ class SupabaseStorage:
         except Exception as exc:
             logger.error("取得 slug 列表失敗: %s", exc)
             return []
+
+    # ── Discovery Reports 操作 ────────────────────────────────────
+
+    def discovery_report_exists(self, topic: str, coverage_date: str) -> bool:
+        """檢查指定主題與日期的統整報告是否已存在。"""
+        try:
+            response = (
+                self.client.table("discovery_reports")
+                .select("id")
+                .eq("topic", topic)
+                .eq("coverage_date", coverage_date)
+                .limit(1)
+                .execute()
+            )
+            return len(response.data) > 0
+        except Exception as exc:
+            logger.error("檢查統整報告是否存在時發生錯誤: %s", exc)
+            return False
+
+    def insert_discovery_report(self, report_data: dict) -> Optional[dict]:
+        """插入一篇多來源新聞統整報告。"""
+        try:
+            response = (
+                self.client.table("discovery_reports").insert(report_data).execute()
+            )
+            if response.data:
+                logger.info("統整報告已儲存：%s", report_data.get("title", "")[:60])
+                return response.data[0]
+            return None
+        except Exception as exc:
+            logger.error(
+                "插入統整報告失敗 [%s]: %s",
+                report_data.get("topic", ""),
+                exc,
+            )
+            return None
+
+    def get_latest_discovery_reports(self, limit: int = 6) -> List[dict]:
+        """取得最新已發布的統整報告。"""
+        try:
+            response = (
+                self.client.table("discovery_reports")
+                .select("*")
+                .eq("is_published", True)
+                .order("coverage_date", desc=True)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return response.data or []
+        except Exception as exc:
+            logger.error("查詢統整報告列表失敗: %s", exc)
+            return []
+
+    def get_discovery_report_by_slug(self, slug: str) -> Optional[dict]:
+        """根據 slug 取得單篇已發布統整報告。"""
+        try:
+            response = (
+                self.client.table("discovery_reports")
+                .select("*")
+                .eq("slug", slug)
+                .eq("is_published", True)
+                .single()
+                .execute()
+            )
+            return response.data
+        except Exception as exc:
+            logger.debug("查詢統整報告 [%s] 失敗: %s", slug, exc)
+            return None
+
+    def get_all_discovery_slugs(self) -> List[dict]:
+        """取得所有已發布統整報告 slug 與 updated_at（供 SSG / sitemap 使用）。"""
+        try:
+            response = (
+                self.client.table("discovery_reports")
+                .select("slug, updated_at")
+                .eq("is_published", True)
+                .order("coverage_date", desc=True)
+                .execute()
+            )
+            return response.data or []
+        except Exception as exc:
+            logger.error("取得統整報告 slug 列表失敗: %s", exc)
+            return []

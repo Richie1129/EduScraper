@@ -5,7 +5,13 @@ const nextConfig = {
   // output: "export",
 
   images: {
-    remotePatterns: [],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.google.com",
+        pathname: "/s2/favicons/**",
+      },
+    ],
   },
 
   // 安全性 HTTP Headers

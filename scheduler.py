@@ -38,16 +38,23 @@ def next_run_time() -> datetime.datetime:
     return target
 
 
-def run_pipeline() -> None:
-    logger.info("開始執行 pipeline...")
+def _run_module(module_name: str) -> bool:
+    logger.info("開始執行 %s...", module_name)
     result = subprocess.run(
-        [sys.executable, "-m", "pipeline.main"],
+        [sys.executable, "-m", module_name],
         capture_output=False,
     )
     if result.returncode == 0:
-        logger.info("pipeline 執行完成")
-    else:
-        logger.error("pipeline 執行失敗，exit code: %d", result.returncode)
+        logger.info("%s 執行完成", module_name)
+        return True
+
+    logger.error("%s 執行失敗，exit code: %d", module_name, result.returncode)
+    return False
+
+
+def run_pipeline() -> None:
+    _run_module("pipeline.main")
+    _run_module("pipeline.discovery")
 
 
 if __name__ == "__main__":

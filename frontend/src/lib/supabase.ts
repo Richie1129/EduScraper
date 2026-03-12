@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { Article, ArticleListResult } from "@/types/article";
+import type { DiscoveryReport } from "@/types/discovery";
 
 // 懶惰初始化：建構期間若沒有設定環境變數，函式會直接回傳空結果
 let _client: SupabaseClient | null = null;
@@ -90,6 +91,63 @@ export async function getAllSlugs(): Promise<
     .select("slug, created_at")
     .eq("is_published", true)
     .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data;
+}
+
+export async function getLatestDiscoveryReports(
+  limit = 3
+): Promise<DiscoveryReport[]> {
+  const supabase = getClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("discovery_reports")
+    .select("*")
+    .eq("is_published", true)
+    .order("coverage_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    if (error) {
+      console.error("[Supabase] getLatestDiscoveryReports error:", error.message);
+    }
+    return [];
+  }
+
+  return data as DiscoveryReport[];
+}
+
+export async function getDiscoveryReportBySlug(
+  slug: string
+): Promise<DiscoveryReport | null> {
+  const supabase = getClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("discovery_reports")
+    .select("*")
+    .eq("slug", slug)
+    .eq("is_published", true)
+    .single();
+
+  if (error || !data) return null;
+  return data as DiscoveryReport;
+}
+
+export async function getAllDiscoverySlugs(): Promise<
+  Array<{ slug: string; updated_at: string }>
+> {
+  const supabase = getClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("discovery_reports")
+    .select("slug, updated_at")
+    .eq("is_published", true)
+    .order("coverage_date", { ascending: false });
 
   if (error || !data) return [];
   return data;

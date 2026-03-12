@@ -27,12 +27,14 @@ EduScraper/
 │   ├── rss_fetcher.py      # feedparser 抓取模組
 │   └── web_scraper.py      # BeautifulSoup / Playwright 爬蟲
 ├── processor/
-│   ├── prompts.py          # vLLM Prompt 模板
-│   └── ai_processor.py     # OpenAI 相容 API 呼叫
+│   ├── prompts.py             # vLLM Prompt 模板
+│   ├── ai_processor.py        # 單篇文章摘要處理器
+│   └── discovery_processor.py # 多來源統整處理器
 ├── storage/
 │   └── supabase_client.py  # Supabase CRUD 操作
 ├── pipeline/
-│   └── main.py             # 主要管線協調
+│   ├── main.py             # 單篇文章主管線
+│   └── discovery.py        # 每日新聞統整管線
 ├── frontend/               # Next.js 14 前端
 │   └── src/
 │       ├── app/            # App Router 頁面
@@ -75,7 +77,10 @@ cp .env.example .env
 # 5. 手動執行一次管線測試
 python -m pipeline.main --limit 5
 
-# 6. 查看說明
+# 6. 手動執行一次 discovery 引擎
+python -m pipeline.discovery
+
+# 7. 查看說明
 python -m pipeline.main --help
 ```
 
@@ -110,6 +115,9 @@ docker-compose logs -f pipeline
 
 # 手動觸發一次執行
 docker-compose exec pipeline python -m pipeline.main --limit 20
+
+# 單獨觸發 discovery pipeline
+docker-compose exec pipeline python -m pipeline.discovery
 ```
 
 ---
@@ -131,6 +139,13 @@ docker-compose exec pipeline python -m pipeline.main --limit 20
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase 服務金鑰（寫入） | ✅ |
 | `RELEVANCE_SCORE_THRESHOLD` | AI 相關度門檻（1–10，預設 5） | |
 | `MAX_ARTICLES_PER_RUN` | 每次最多處理篇數（預設 50） | |
+| `TAVILY_API_KEY` | Tavily 搜尋與內容擷取 API 金鑰 | discovery 建議必填 |
+| `SERPAPI_API_KEY` | SERP API 金鑰，搭配 Jina Reader 使用 | discovery 備援 |
+| `DISCOVERY_TOPICS` | discovery 主題清單，以逗號分隔 | |
+| `DISCOVERY_QUERY_TEMPLATE` | discovery 搜尋模板，支援 `{topic}`、`{coverage_date}` | |
+| `DISCOVERY_MAX_SOURCES_PER_TOPIC` | 每個主題最多整合來源數，預設 5 | |
+| `DISCOVERY_MAX_AGE_DAYS` | discovery 只保留幾天內新聞，預設 30 | |
+| `DISCOVERY_ALLOW_UNDATED_SOURCES` | 是否允許沒有日期的來源，預設 `false` | |
 | `USE_HSUEH_VLLM` | 使用備用伺服器（`true`/`false`） | |
 
 ### 前端 (`frontend/.env.local`)
@@ -165,6 +180,29 @@ docker-compose exec pipeline python -m pipeline.main --limit 20
 ```
 
 相關度分數 < `RELEVANCE_SCORE_THRESHOLD`（預設 5）的文章會自動跳過，確保只有高品質的教育科技相關內容進入資料庫。
+
+### Discovery 引擎
+
+`pipeline.discovery` 會依據 `DISCOVERY_TOPICS` 逐一搜尋新聞來源，優先使用 Tavily API；若未提供 Tavily，則改走 `SERPAPI_API_KEY + Jina Reader` 的組合。每個主題會產生一篇帶引用標註的 Markdown 統整文章，並連同參考文獻 JSON 寫入 `discovery_reports`。
+
+為避免混入舊新聞，discovery 現在有兩層新鮮度限制：
+- 搜尋查詢會帶入 `coverage_date`
+- 程式會再用 `DISCOVERY_MAX_AGE_DAYS` 做日期過濾，且預設拒絕跨年份與無日期來源
+
+資料表核心欄位：
+- `markdown_content`：完整 Markdown 報導內容，句句帶來源標註如 `[1]`
+- `source_references`：來源陣列，包含標題、網址、摘錄、favicon 與原始內容節錄
+- `coverage_date`：該篇統整覆蓋日期
+- `topic`：該篇統整主題
+
+### 前端建構權限注意
+
+若曾用 `sudo`、root 容器或其他高權限帳號在 `frontend/` 執行 `next build`，可能會留下 root 擁有的 `.next` 產物，之後本機 build 會出現 `EACCES: permission denied, unlink ...`。
+
+建議處理方式：
+- 直接移走舊的 `.next` 目錄後重新 build
+- 或將 `.next` 目錄 ownership 改回目前使用者
+- 後續避免用 root 身分在本機直接執行前端 build
 
 ---
 

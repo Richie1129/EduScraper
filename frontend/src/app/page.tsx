@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { getArticles } from "@/lib/supabase";
+import { getArticles, getLatestDiscoveryReports } from "@/lib/supabase";
 import ArticleCard from "@/components/ArticleCard";
+import DiscoveryCard from "@/components/DiscoveryCard";
 import NewsletterForm from "@/components/NewsletterForm";
-import { FiInbox, FiX } from "react-icons/fi";
+import { FiArrowRight, FiCompass, FiInbox, FiX } from "react-icons/fi";
 
 // ISR：每小時重新驗證一次，確保新文章即時呈現
 export const revalidate = 3600;
@@ -23,7 +24,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const page = Math.max(1, parseInt(searchParams.page ?? "1"));
   const tag = searchParams.tag;
 
-  const { articles, total } = await getArticles(page, PER_PAGE, tag);
+  const [discoveryReports, { articles, total }] = await Promise.all([
+    getLatestDiscoveryReports(3),
+    getArticles(page, PER_PAGE, tag),
+  ]);
   const totalPages = Math.ceil(total / PER_PAGE);
 
   return (
@@ -39,6 +43,37 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           最新研究，讓台灣教師快速掌握前沿知識。
         </p>
       </section>
+
+      {discoveryReports.length > 0 && (
+        <section className="mb-14 overflow-hidden rounded-[32px] border border-amber-200 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.18),_transparent_34%),linear-gradient(135deg,_#fffdf7,_#ffffff)] p-6 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
+                <FiCompass className="h-3.5 w-3.5" aria-hidden="true" /> Discovery Engine
+              </div>
+              <h2 className="text-2xl font-extrabold tracking-tight text-stone-900 sm:text-3xl">
+                每日新聞統整發現
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-stone-600 sm:text-base">
+                以多來源搜尋與引用式摘要，將分散新聞壓縮成可回溯的每日統整報導。
+              </p>
+            </div>
+            <a
+              href="/discoveries"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-900"
+            >
+              查看全部統整
+              <FiArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-3">
+            {discoveryReports.map((report) => (
+              <DiscoveryCard key={report.id} report={report} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 標籤篩選列 */}
       <div className="flex flex-wrap gap-2 mb-8 justify-center">
