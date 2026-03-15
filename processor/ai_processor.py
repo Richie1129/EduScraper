@@ -163,7 +163,7 @@ class VLLMProcessor:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.2,
-                    max_tokens=2500,
+                    max_tokens=3200,
                 )
 
                 raw_content = response.choices[0].message.content
@@ -315,8 +315,12 @@ class VLLMProcessor:
         隨機選擇一台 vLLM 伺服器處理文章，失敗時自動 fallback 至另一台。
         兩台都失敗才放棄，回傳 None。
         """
-        prompt = build_analysis_prompt(article)
         title_preview = article.get("original_title", "")[:60]
+        try:
+            prompt = build_analysis_prompt(article)
+        except Exception as exc:
+            logger.error("Prompt 建立失敗，跳過：%s — %s", title_preview, exc, exc_info=True)
+            return None
 
         for server in self._servers:
             result = self._try_server(server, prompt, title_preview)
