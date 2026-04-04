@@ -31,3 +31,22 @@ export interface ArticleListResult {
   articles: Article[];
   total: number;
 }
+
+export interface SearchResultItem {
+  id: string;
+  slug: string;
+  original_title: string;
+  translated_title: string;
+  source_url: string;
+  source_name: string;
+  one_sentence_summary: string;
+  tags: string[];
+  relevance_score: number;
+  created_at: string;
+  search_rank: number;
+}
+
+export interface SearchResult {
+  results: SearchResultItem[];
+  total: number;
+}

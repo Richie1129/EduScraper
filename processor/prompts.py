@@ -3,6 +3,9 @@ Prompt 模板模組
 定義傳送給 vLLM 的提示詞，要求模型輸出標準化 JSON 格式的繁體中文摘要。
 """
 
+# 統一摘要截斷長度（中文字元數），避免各 prompt 使用不同上限
+ABSTRACT_MAX_CHARS = 2500
+
 
 SYSTEM_PROMPT = (
     "你是一位專精於教育科技（EdTech）、自主學習（SRL）、專題式學習（PBL）"
@@ -42,7 +45,7 @@ def build_analysis_prompt(article: dict) -> str:
     abstract = article.get("original_abstract", "（無摘要）")
 
     # 截斷過長摘要，避免壓縮模型輸出空間（輸入越短，留給 JSON 輸出的 token 越多）
-    abstract_trimmed = abstract[:1500] if len(abstract) > 1500 else abstract
+    abstract_trimmed = abstract[:ABSTRACT_MAX_CHARS] if len(abstract) > ABSTRACT_MAX_CHARS else abstract
 
     return f"""請分析以下學術論文或教育科技文章，並以 JSON 格式輸出結構化摘要。
 
@@ -59,19 +62,17 @@ def build_analysis_prompt(article: dict) -> str:
   "translated_title": "文章的繁體中文標題（自然流暢的翻譯，30字以內）",
   "one_sentence_summary": "用一句話（50字以內）總結這篇文章的核心貢獻或最重要的發現",
   "key_findings": [
-    "第一個核心研究發現或重點（30-80字，清楚具體）",
-    "第二個核心研究發現或重點（30-80字，清楚具體）",
-    "第三個核心研究發現或重點（30-80字，清楚具體）",
-    "第四個核心研究發現或重點（30-80字，清楚具體）",
-    "第五個核心研究發現或重點（30-80字，清楚具體）"
+    "文章本身陳述的事實性發現或數據結果（30-80字，清楚具體）",
+    "第二個事實性發現（30-80字）",
+    "第三個事實性發現（30-80字，若文章內容足夠才需要更多條目）"
   ],
   "ai_highlights": [
     {{
-      "point": "AI 最推薦先讀的重點（25-60字）",
-      "reason": "說明 AI 為何認為這點值得優先注意，需根據文章內容與研究價值解釋（40-120字）"
+      "point": "AI 認為讀者最該優先注意的洞察或啟發（25-60字）",
+      "reason": "說明這個洞察為何重要——它如何改變讀者對該領域的理解或實務做法（40-120字）"
     }},
     {{
-      "point": "第二個值得先掌握的重點（25-60字）",
+      "point": "第二個值得先掌握的洞察（25-60字）",
       "reason": "說明這點為何會影響讀者理解整篇文章或後續應用（40-120字）"
     }}
   ],
@@ -83,8 +84,8 @@ def build_analysis_prompt(article: dict) -> str:
 }}
 
 注意事項：
-1. key_findings 必須恰好包含 5 個條目，每個條目獨立成一個有意義的句子
-2. ai_highlights 必須包含 2-3 個物件，每個物件都要有 point 與 reason 兩個欄位
+1. key_findings 包含 3-5 個條目，依據文章實際內容決定數量；每個條目聚焦文章本身的事實、數據或研究結果（What happened）
+2. ai_highlights 包含 2-3 個物件，聚焦 AI 對讀者的閱讀建議與洞察（Why it matters）；不可與 key_findings 重複同樣的句子
 3. ai_highlights.reason 要回答「為什麼 AI 覺得這是重點」，不可只重複 point 本身
 4. research_method 若文章未明確說明方法，請根據內容合理推斷並說明
 5. target_audience 請具體指出最受益的受眾群體
@@ -105,7 +106,7 @@ def build_discovery_prompt(topic: str, query: str, sources: list[dict]) -> str:
         source_name = source.get("source_name", "（未知來源）")
         excerpt = source.get("excerpt", "（無摘錄）")
         content = source.get("content", "（無內容）")
-        trimmed_content = content[:1800] if len(content) > 1800 else content
+        trimmed_content = content[:ABSTRACT_MAX_CHARS] if len(content) > ABSTRACT_MAX_CHARS else content
 
         source_blocks.append(
             f"""[{source_id}]
@@ -171,7 +172,7 @@ def build_ai_highlights_backfill_prompt(article: dict) -> str:
         findings_block = "- （未提供）"
 
     abstract_trimmed = (
-        original_abstract[:2200] if len(original_abstract) > 2200 else original_abstract
+        original_abstract[:ABSTRACT_MAX_CHARS] if len(original_abstract) > ABSTRACT_MAX_CHARS else original_abstract
     )
 
     return f"""請根據以下已整理好的文章資訊，只產出更精煉、更有判斷力的 AI 重點。

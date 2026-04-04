@@ -76,6 +76,12 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className={inter.variable} suppressHydrationWarning>
       <head>
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="EduInsight RSS"
+          href="/api/rss"
+        />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {adsenseId && (
           <Script

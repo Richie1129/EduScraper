@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FiBook, FiAlertTriangle } from "react-icons/fi";
+import { FiAlertTriangle, FiBook, FiRss } from "react-icons/fi";
 import { getPopularTags } from "@/lib/supabase";
 
 export default async function Footer() {
@@ -61,6 +61,15 @@ export default async function Footer() {
               <li className="flex items-center gap-1.5">
                 <FiAlertTriangle className="text-yellow-400 shrink-0" aria-hidden="true" />
                 AI 摘要僅供參考，完整資訊請閱讀原文
+              </li>
+              <li className="mt-3">
+                <Link
+                  href="/api/rss"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-400 transition-colors hover:text-orange-300"
+                >
+                  <FiRss className="h-4 w-4" aria-hidden="true" />
+                  RSS 訂閱
+                </Link>
               </li>
             </ul>
           </div>

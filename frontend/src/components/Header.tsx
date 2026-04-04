@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { FiBook, FiMenu, FiX } from "react-icons/fi";
+import { FiBook, FiMenu, FiSearch, FiX } from "react-icons/fi";
 import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV_LINKS = [
@@ -48,6 +48,13 @@ export default function Header() {
                 {label}
               </Link>
             ))}
+            <Link
+              href="/search"
+              aria-label="搜尋文章"
+              className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-blue-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+            >
+              <FiSearch className="h-5 w-5" aria-hidden="true" />
+            </Link>
             <ThemeToggle />
           </div>
 
@@ -87,6 +94,17 @@ export default function Header() {
                   {label}
                 </Link>
               ))}
+              <Link
+                href="/search"
+                className={`flex items-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors ${
+                  pathname === "/search"
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200"
+                    : "text-slate-700 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-blue-300"
+                }`}
+              >
+                <FiSearch className="h-4 w-4" aria-hidden="true" />
+                搜尋文章
+              </Link>
             </div>
           </div>
         )}

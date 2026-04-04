@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import type { Article, ArticleListResult } from "@/types/article";
+import type { Article, ArticleListResult, SearchResult } from "@/types/article";
 import type { DiscoveryReport } from "@/types/discovery";
 import {
   buildPopularTopicTag,
@@ -156,6 +156,45 @@ export async function getAllDiscoverySlugs(): Promise<
 
   if (error || !data) return [];
   return data;
+}
+
+/**
+ * 全文搜尋文章（呼叫 Supabase RPC）
+ */
+export async function searchArticles(
+  query: string,
+  page = 1,
+  perPage = 12
+): Promise<SearchResult> {
+  const supabase = getClient();
+  if (!supabase || !query.trim()) return { results: [], total: 0 };
+
+  const offset = (page - 1) * perPage;
+
+  const [{ data, error }, { data: countData, error: countError }] =
+    await Promise.all([
+      supabase.rpc("search_articles", {
+        search_query: query.trim(),
+        result_limit: perPage,
+        result_offset: offset,
+      }),
+      supabase.rpc("search_articles_count", {
+        search_query: query.trim(),
+      }),
+    ]);
+
+  if (error) {
+    console.error("[Supabase] searchArticles error:", error.message);
+    return { results: [], total: 0 };
+  }
+  if (countError) {
+    console.error("[Supabase] searchArticlesCount error:", countError.message);
+  }
+
+  return {
+    results: (data as SearchResult["results"]) ?? [],
+    total: (countData as number) ?? 0,
+  };
 }
 
 export async function getPopularTags(
