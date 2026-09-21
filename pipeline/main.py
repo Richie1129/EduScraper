@@ -11,6 +11,7 @@ EduScraper 主要資料管線
 用法：
   python -m pipeline.main
   python -m pipeline.main --limit 20
+  python -m pipeline.main --limit 10 --sources arxiv
 """
 
 import argparse
@@ -88,12 +89,22 @@ def _dedupe_articles_by_url(articles: list[dict]) -> list[dict]:
     return deduped
 
 
-def run_pipeline(max_articles: int = 50) -> int:
+def _filter_sources(sources: list[dict], keywords: list[str]) -> list[dict]:
+    """依來源名稱關鍵字篩選（不分大小寫的子字串比對）。"""
+    return [
+        source
+        for source in sources
+        if any(keyword in source.get("name", "").lower() for keyword in keywords)
+    ]
+
+
+def run_pipeline(max_articles: int = 50, sources: list[str] | None = None) -> int:
     """
     執行完整資料管線。
 
     Args:
         max_articles: 此次執行最多處理的文章數量
+        sources: 只處理名稱含這些關鍵字的來源（不分大小寫）；None 代表全部
 
     Returns:
         int: 成功儲存的文章數量
@@ -113,13 +124,29 @@ def run_pipeline(max_articles: int = 50) -> int:
         return 0
 
     # ── 步驟 1：抓取來源 ──────────────────────────────────────────
+    rss_sources, scrape_sources = RSS_SOURCES, SCRAPE_SOURCES
+    if sources:
+        keywords = [keyword.strip().lower() for keyword in sources if keyword.strip()]
+        rss_sources = _filter_sources(RSS_SOURCES, keywords)
+        scrape_sources = _filter_sources(SCRAPE_SOURCES, keywords)
+        if not rss_sources and not scrape_sources:
+            logger.error("找不到名稱含 %s 的來源，管線結束。", "、".join(keywords))
+            return 0
+        logger.info(
+            "來源篩選「%s」：RSS %d 個、補充爬蟲 %d 個（%s）",
+            "、".join(keywords),
+            len(rss_sources),
+            len(scrape_sources),
+            "、".join(s["name"] for s in rss_sources + scrape_sources),
+        )
+
     logger.info(
         "步驟 1/3：抓取內容來源（RSS %d 個，補充爬蟲 %d 個）",
-        len(RSS_SOURCES),
-        len(SCRAPE_SOURCES),
+        len(rss_sources),
+        len(scrape_sources),
     )
-    rss_articles = fetch_all_feeds(RSS_SOURCES)
-    scrape_articles = fetch_all_scrape_sources(SCRAPE_SOURCES)
+    rss_articles = fetch_all_feeds(rss_sources)
+    scrape_articles = fetch_all_scrape_sources(scrape_sources)
     all_articles = _dedupe_articles_by_url(rss_articles + scrape_articles)
     logger.info(
         "抓取完成：RSS %d 篇 + 補充爬蟲 %d 篇，合併去重後 %d 篇",
@@ -235,9 +262,15 @@ def main():
         default=int(os.getenv("MAX_ARTICLES_PER_RUN", "50")),
         help="每次執行最多處理的文章數量（預設：50）",
     )
+    parser.add_argument(
+        "--sources",
+        nargs="+",
+        metavar="關鍵字",
+        help="只跑名稱含指定關鍵字的來源（不分大小寫，可給多個），例如：--sources arxiv",
+    )
     args = parser.parse_args()
 
-    count = run_pipeline(max_articles=args.limit)
+    count = run_pipeline(max_articles=args.limit, sources=args.sources)
     sys.exit(0 if count >= 0 else 1)
 
 

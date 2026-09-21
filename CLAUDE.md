@@ -22,8 +22,8 @@ python -m pipeline.main
 # 指定篇數上限
 python -m pipeline.main --limit 5
 
-# 使用備用 vLLM 伺服器
-python -m pipeline.main --use-backup-vllm
+# 只跑特定來源（依來源名稱關鍵字，不分大小寫）
+python -m pipeline.main --limit 10 --sources arxiv
 
 # 手動啟動排程器（Docker 外使用）
 python scheduler.py
@@ -90,7 +90,7 @@ deploy/deploy-vm.sh --env-only           # 只同步 app.env 與 compose 設定�
 - 對外走 VM 共用的 Cloudflare Tunnel connector `richie-cloudflared`（`~/cloudflared/docker-compose.yml`，tunnel `proxmox-richie-111`，同時服務 grading / science / alphapicks），`eduscraper.wuretedu.com` → `http://eduscraper-app:3000` 於 Cloudflare 後台設定；不要在本專案另外啟用 `COMPOSE_PROFILES=tunnel`
 - 若 `eduscraper_net` 被 `docker compose down` 重建，需 `cd ~/cloudflared && docker compose up -d --force-recreate` 讓 connector 重新接上（一般 `deploy-vm.sh` 不會重建網路）
 - 新網域剛建立時，部分 DNS 解析器（如 8.8.8.8）可能因負快取（TTL 1800 秒）暫時回 NXDOMAIN，約 30 分鐘內自行恢復
-- 手動觸發管線：`ssh richie@192.168.30.111 'docker exec eduscraper-app python -m pipeline.main --limit 20'`
+- 手動觸發管線：`ssh richie@192.168.30.111 'docker exec eduscraper-app python -m pipeline.main --limit 20'`（可加 `--sources arxiv` 只跑特定來源）
 
 ## 架構說明
 
