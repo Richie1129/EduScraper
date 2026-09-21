@@ -8,10 +8,12 @@
 #   deploy/deploy-vm.sh                      部署 ghcr 上的 :main
 #   deploy/deploy-vm.sh --tag <commit-sha>   部署／回滾到指定版本
 #   deploy/deploy-vm.sh --env-only           只同步 app.env 與 compose 設定，不重啟
-#   DEPLOY_HOST=richie@1.2.3.4 deploy/deploy-vm.sh
+#
+# 連線目標不寫在版控裡：請設環境變數 DEPLOY_HOST=<user>@<host>，
+# 或建立未進版控的 deploy/deploy.local.env（見 deploy/deploy.local.env.example）。
 #
 # 拉取私有映像需先在 VM 上登入 ghcr（GitHub PAT 需 read:packages 權限）：
-#   ssh richie@192.168.30.111 'echo <PAT> | docker login ghcr.io -u Richie1129 --password-stdin'
+#   ssh "$DEPLOY_HOST" 'echo <PAT> | docker login ghcr.io -u <github-user> --password-stdin'
 #   （workflow 自動部署時用的是當次的 GITHUB_TOKEN，不受此影響）
 #
 # 伺服器上的 ~/eduscraper/.env（compose 變數）由人工維護，本腳本不會覆寫：
@@ -19,15 +21,19 @@
 #   NEXT_PUBLIC_SITE_URL=https://eduscraper.wuretedu.com
 #   NEXT_PUBLIC_ADSENSE_ID=
 #   IMAGE_TAG=...                    （部署流程自動寫入）
-# 對外的 Cloudflare Tunnel 由 VM 共用的 ~/cloudflared（richie-cloudflared）負責，
+# 對外的 Cloudflare Tunnel 由 VM 上共用的 cloudflared connector（~/cloudflared）負責，
 # 不需要在此設定 CLOUDFLARE_TUNNEL_TOKEN / COMPOSE_PROFILES。
 set -euo pipefail
 
-HOST="${DEPLOY_HOST:-richie@192.168.30.111}"
+# 連線目標由環境變數或未進版控的本機設定檔提供，不寫死在 repo 裡
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$ROOT/deploy/deploy.local.env" ]; then
+  . "$ROOT/deploy/deploy.local.env"
+fi
+HOST="${DEPLOY_HOST:?請設定 DEPLOY_HOST=<user>@<host>，或建立 deploy/deploy.local.env}"
 DIR="${DEPLOY_DIR:-eduscraper}"
 TAG="main"
 ENV_ONLY=0
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 while [ $# -gt 0 ]; do
   case "$1" in

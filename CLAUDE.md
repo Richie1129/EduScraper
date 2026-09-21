@@ -87,10 +87,11 @@ deploy/deploy-vm.sh --env-only           # 只同步 app.env 與 compose 設定�
 - 服務：`db`（postgres:17-alpine，資料在 volume `eduscraper_pgdata`，僅綁 127.0.0.1:35432）、`app`（Next.js + 排程器，127.0.0.1:3200，映像來自 ghcr）；compose 內的 `cloudflared`（profile `tunnel`）保持停用
 - 伺服器 `.env` 需有：`POSTGRES_PASSWORD`、`NEXT_PUBLIC_SITE_URL`、`IMAGE_TAG`（部署流程自動寫入）
 - `NEXT_PUBLIC_*` 於建構時內嵌進 Next.js 產物，由 workflow 的 build-args 帶入（取自 repo variables，未設定時用 `https://eduscraper.wuretedu.com`）；改值要重新建構，改伺服器 `.env` 沒有用
-- 對外走 VM 共用的 Cloudflare Tunnel connector `richie-cloudflared`（`~/cloudflared/docker-compose.yml`，tunnel `proxmox-richie-111`，同時服務 grading / science / alphapicks），`eduscraper.wuretedu.com` → `http://eduscraper-app:3000` 於 Cloudflare 後台設定；不要在本專案另外啟用 `COMPOSE_PROFILES=tunnel`
+- 對外走 VM 上共用的 Cloudflare Tunnel connector（`~/cloudflared/docker-compose.yml`，同時服務同機其他專案），`eduscraper.wuretedu.com` → `http://eduscraper-app:3000` 於 Cloudflare 後台設定；不要在本專案另外啟用 `COMPOSE_PROFILES=tunnel`
 - 若 `eduscraper_net` 被 `docker compose down` 重建，需 `cd ~/cloudflared && docker compose up -d --force-recreate` 讓 connector 重新接上（一般 `deploy-vm.sh` 不會重建網路）
 - 新網域剛建立時，部分 DNS 解析器（如 8.8.8.8）可能因負快取（TTL 1800 秒）暫時回 NXDOMAIN，約 30 分鐘內自行恢復
-- 手動觸發管線：`ssh richie@192.168.30.111 'docker exec eduscraper-app python -m pipeline.main --limit 20'`（可加 `--sources arxiv` 只跑特定來源）
+- 手動觸發管線（在 VM 上，或 `ssh "$DEPLOY_HOST"`；連線資訊見未進版控的 `deploy/deploy.local.env`）：
+  `docker exec eduscraper-app python -m pipeline.main --limit 20`（可加 `--sources arxiv` 只跑特定來源）
 
 ## 架構說明
 

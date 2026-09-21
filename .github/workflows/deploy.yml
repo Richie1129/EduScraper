@@ -1,7 +1,7 @@
 # push 到 main：在 GitHub 雲端建構映像 → 推到 ghcr.io → VM 上的 self-hosted runner 拉取並重啟
 #
 # 架構說明：
-# - VM（192.168.30.111）在內網，GitHub 雲端 runner 連不進來，因此部署階段由架在 VM 上的
+# - 目標 VM 在內網，GitHub 雲端 runner 連不進來，因此部署階段由架在 VM 上的
 #   self-hosted runner 執行（pull 模式，不需把 SSH 私鑰放進 Secrets，也不需開任何對外埠）。
 #   runner 安裝見 deploy/setup-runner.sh，標籤需含 eduscraper。
 # - 映像推到 GitHub Container Registry：拉與推都用 workflow 自帶的 GITHUB_TOKEN，不需額外 secret。
@@ -38,7 +38,8 @@ env:
   APP_IMAGE: ghcr.io/richie1129/eduscraper-app
   # 以 commit SHA 作為唯一版號
   IMAGE_TAG: ${{ github.sha }}
-  DEPLOY_DIR: /home/richie/eduscraper
+  # 部署目錄為 runner 使用者家目錄下的這個子目錄（主機位址與使用者名不寫進 repo）
+  DEPLOY_SUBDIR: eduscraper
 
 jobs:
   # ────────────────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ jobs:
           SKIP_SCHEMA: ${{ inputs.skip_schema && '1' || '0' }}
         run: |
           set -euo pipefail
+          DEPLOY_DIR="${HOME}/${DEPLOY_SUBDIR}"
           cd "${DEPLOY_DIR}" || { echo "::error::部署目錄 ${DEPLOY_DIR} 不存在"; exit 1; }
           for f in .env app.env; do
             [ -f "$f" ] || { echo "::error::${DEPLOY_DIR}/$f 不存在（機密檔由人工維護，見 deploy/deploy-vm.sh）"; exit 1; }
@@ -166,7 +168,7 @@ jobs:
       - name: 驗證部署結果
         run: |
           set -euo pipefail
-          cd "${DEPLOY_DIR}"
+          cd "${HOME}/${DEPLOY_SUBDIR}"
           docker compose ps
 
           # 執行中的映像必須是本次 tag

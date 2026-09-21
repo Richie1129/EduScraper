@@ -48,3 +48,5 @@ Thumbs.db
 
 # Markdown
 pipeline-run.md
+# 部署連線設定（含主機位址，不進版控）
+deploy/deploy.local.env

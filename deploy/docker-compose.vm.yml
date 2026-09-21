@@ -1,4 +1,4 @@
-# EduScraper — Proxmox VM（192.168.30.111）部署用 compose
+# EduScraper — Proxmox VM 部署用 compose
 #
 # 映像由 GitHub Actions 建構後推到 ghcr.io/richie1129/eduscraper-app，
 # 伺服器只負責拉取（見 .github/workflows/deploy.yml）；不在 VM 上建構。
@@ -13,7 +13,7 @@
 # 設計重點（與同機 grading / SDL 專案對齊）：
 # - 專案名稱固定為 eduscraper：容器、network 全帶前綴，與同機其他專案隔離
 # - 不發布任何對外主機埠；正式流量走 Cloudflare Tunnel，由 VM 共用的 connector
-#   richie-cloudflared（~/cloudflared）以 eduscraper-app:3000 為 origin，並掛在 eduscraper_net。
+#   （~/cloudflared）以 eduscraper-app:3000 為 origin，並掛在 eduscraper_net。
 #   區網除錯只綁 127.0.0.1:3200（避開同機已用的 3100 / 8080 / 8100 / 2100 等）
 # - 下方的 cloudflared 服務掛在 profile "tunnel"，預設不啟動（避免與共用 connector 重複）
 # - PostgreSQL 只在 eduscraper_net 內以 db:5432 提供服務，主機端僅綁 127.0.0.1:35432
