@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { createClient } from "@supabase/supabase-js";
+import { ARTICLE_COLUMNS, getPool } from "@/lib/db";
 import type { Article } from "@/types/article";
 
 const SITE_URL =
@@ -13,42 +13,48 @@ function getResend() {
   return new Resend(key);
 }
 
-function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase 環境變數未設定");
-  return createClient(url, key);
+function requirePool() {
+  const pool = getPool();
+  if (!pool) throw new Error("DATABASE_URL 未設定");
+  return pool;
 }
 
 /** 取得最近 N 天的已發布文章 */
 export async function getRecentArticles(days = 7): Promise<Article[]> {
-  const supabase = getServiceClient();
+  const pool = requirePool();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  const { data, error } = await supabase
-    .from("articles")
-    .select("*")
-    .eq("is_published", true)
-    .gte("created_at", since.toISOString())
-    .order("relevance_score", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  if (error) throw new Error(`取得文章失敗: ${error.message}`);
-  return (data as Article[]) ?? [];
+  try {
+    const { rows } = await pool.query<Article>(
+      `SELECT ${ARTICLE_COLUMNS} FROM articles
+       WHERE is_published = TRUE AND created_at >= $1
+       ORDER BY relevance_score DESC, created_at DESC
+       LIMIT 10`,
+      [since.toISOString()]
+    );
+    return rows;
+  } catch (error) {
+    throw new Error(
+      `取得文章失敗: ${error instanceof Error ? error.message : error}`
+    );
+  }
 }
 
 /** 取得所有活躍訂閱者的 email */
 export async function getActiveSubscribers(): Promise<string[]> {
-  const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("newsletter_subscribers")
-    .select("email")
-    .eq("is_active", true);
+  const pool = requirePool();
 
-  if (error) throw new Error(`取得訂閱者失敗: ${error.message}`);
-  return (data ?? []).map((row) => row.email);
+  try {
+    const { rows } = await pool.query<{ email: string }>(
+      "SELECT email FROM newsletter_subscribers WHERE is_active = TRUE"
+    );
+    return rows.map((row) => row.email);
+  } catch (error) {
+    throw new Error(
+      `取得訂閱者失敗: ${error instanceof Error ? error.message : error}`
+    );
+  }
 }
 
 /** 產生電子報 HTML */

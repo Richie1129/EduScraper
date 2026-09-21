@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getPool } from "@/lib/db";
 
 // 簡易記憶體速率限制：每個 IP 每小時最多 5 次訂閱請求
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -16,16 +16,6 @@ function checkRateLimit(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return false;
   entry.count++;
   return true;
-}
-
-// 使用 service role 金鑰寫入訂閱者（繞過 RLS），僅在伺服器端使用
-function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("Supabase 環境變數未設定");
-  }
-  return createClient(url, key);
 }
 
 const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
@@ -61,18 +51,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = getServiceClient();
-    const { error } = await supabase
-      .from("newsletter_subscribers")
-      .upsert({ email, is_active: true }, { onConflict: "email" });
-
-    if (error) {
-      console.error("[Newsletter API] Supabase error:", error.message);
-      return NextResponse.json(
-        { message: "訂閱失敗，請稍後再試。" },
-        { status: 500 }
-      );
+    const pool = getPool();
+    if (!pool) {
+      throw new Error("DATABASE_URL 未設定");
     }
+
+    // 重複訂閱視為重新啟用，不覆寫原本的 subscribed_at
+    await pool.query(
+      `INSERT INTO newsletter_subscribers (email, is_active)
+       VALUES ($1, TRUE)
+       ON CONFLICT (email) DO UPDATE SET is_active = TRUE`,
+      [email]
+    );
 
     return NextResponse.json({ message: "success" }, { status: 200 });
   } catch (err) {

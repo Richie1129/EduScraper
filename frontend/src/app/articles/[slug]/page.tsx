@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getArticleBySlug, getAllSlugs } from "@/lib/supabase";
+import { getArticleBySlug, getAllSlugs } from "@/lib/db";
 // import AdSense from "@/components/AdSense";
 import AIHighlights from "@/components/AIHighlights";
 import NewsletterForm from "@/components/NewsletterForm";

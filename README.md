@@ -11,7 +11,7 @@ Python 管線（每日 crontab 自動觸發）
     ↓
 vLLM API（翻譯 + 結構化摘要 → JSON）
     ↓
-Supabase PostgreSQL（持久化儲存）
+PostgreSQL（持久化儲存）
     ↓
 Next.js ISR/SSG（自動重建頁面）
     ↓
@@ -31,7 +31,7 @@ EduScraper/
 │   ├── ai_processor.py        # 單篇文章摘要處理器
 │   └── discovery_processor.py # 多來源統整處理器
 ├── storage/
-│   └── supabase_client.py  # Supabase CRUD 操作
+│   └── postgres_client.py  # PostgreSQL CRUD 操作（psycopg）
 ├── pipeline/
 │   ├── main.py             # 單篇文章主管線
 │   └── discovery.py        # 每日新聞統整管線
@@ -39,9 +39,10 @@ EduScraper/
 │   └── src/
 │       ├── app/            # App Router 頁面
 │       ├── components/     # UI 元件
-│       ├── lib/            # Supabase 客戶端
+│       ├── lib/            # PostgreSQL 連線池與查詢（db.ts）
 │       └── types/          # TypeScript 型別
-├── setup_db.sql            # Supabase 資料庫初始化
+├── db/schema.sql           # PostgreSQL schema（可重複執行）
+├── deploy/                 # Proxmox VM 部署（compose + 部署腳本）
 ├── Dockerfile              # 容器化管線
 ├── docker-compose.yml
 ├── crontab.txt             # 排程設定
@@ -52,11 +53,18 @@ EduScraper/
 
 ## 快速開始
 
-### 一、設定 Supabase
+### 一、設定 PostgreSQL
 
-1. 至 [supabase.com](https://supabase.com) 建立新專案
-2. 在 **SQL Editor** 貼上並執行 `setup_db.sql` 的全部內容
-3. 取得專案的 `URL`、`anon key`、`service_role key`
+```bash
+# 啟動本機資料庫（或使用任何 PostgreSQL 14+）
+docker run -d --name eduscraper-pg -e POSTGRES_USER=eduscraper -e POSTGRES_PASSWORD=devpw \
+  -e POSTGRES_DB=eduscraper -p 127.0.0.1:5432:5432 postgres:17-alpine
+
+# 建立資料表、索引與搜尋函式（可重複執行）
+docker exec -i eduscraper-pg psql -U eduscraper -d eduscraper -v ON_ERROR_STOP=1 < db/schema.sql
+```
+
+連線字串：`postgresql://eduscraper:devpw@127.0.0.1:5432/eduscraper`（設為 `DATABASE_URL`）
 
 ### 二、Python 管線
 
@@ -72,7 +80,7 @@ playwright install chromium
 
 # 4. 複製並填寫環境變數
 cp .env.example .env
-# 編輯 .env，填入 Supabase URL 與金鑰
+# 編輯 .env，填入 DATABASE_URL 與其他金鑰
 
 # 5. 手動執行一次管線測試
 python -m pipeline.main --limit 5
@@ -94,7 +102,7 @@ npm install
 
 # 2. 設定環境變數
 cp .env.local.example .env.local
-# 編輯 .env.local，填入 Supabase 金鑰與網站 URL
+# 編輯 .env.local，填入 DATABASE_URL 與網站 URL
 
 # 3. 本地開發
 npm run dev
@@ -134,9 +142,7 @@ docker-compose exec pipeline python -m pipeline.discovery
 | `HSUEH_VLLM_BASE_URL` | 備用 vLLM 伺服器地址 | |
 | `HSUEH_VLLM_MODEL_NAME` | 備用模型名稱 | |
 | `HSUEH_VLLM_API_KEY` | 備用伺服器金鑰 | |
-| `SUPABASE_URL` | Supabase 專案 URL | ✅ |
-| `SUPABASE_ANON_KEY` | Supabase 匿名金鑰（讀取） | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase 服務金鑰（寫入） | ✅ |
+| `DATABASE_URL` | PostgreSQL 連線字串 | ✅ |
 | `RELEVANCE_SCORE_THRESHOLD` | AI 相關度門檻（1–10，預設 5） | |
 | `MAX_ARTICLES_PER_RUN` | 每次最多處理篇數（預設 50） | |
 | `TAVILY_API_KEY` | Tavily 搜尋與內容擷取 API 金鑰 | discovery 建議必填 |
@@ -152,9 +158,7 @@ docker-compose exec pipeline python -m pipeline.discovery
 
 | 變數名 | 說明 | 必填 |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 專案 URL | ✅ |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase 匿名金鑰 | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` | 服務金鑰（電子報 API 用） | ✅ |
+| `DATABASE_URL` | PostgreSQL 連線字串（僅伺服器端使用） | ✅ |
 | `NEXT_PUBLIC_ADSENSE_ID` | Google AdSense 廣告主 ID | |
 | `NEXT_PUBLIC_SITE_URL` | 正式網站 URL（SEO/Sitemap） | |
 
@@ -201,9 +205,9 @@ docker-compose exec pipeline python -m pipeline.discovery
 - `coverage_date`：該篇統整覆蓋日期
 - `topic`：該篇統整主題
 
-### ai_highlights Migration
+### Schema 變更
 
-若你只想補上文章的 `ai_highlights` 欄位，而不想重跑整份 schema，可直接把 [ai_highlights_migration.sql](ai_highlights_migration.sql) 貼進 Supabase SQL Editor 執行。
+`db/schema.sql` 全部使用 `IF NOT EXISTS` / `CREATE OR REPLACE`，可重複執行；新增欄位時直接改此檔並加入 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`。`setup_db.sql`、`search_migration.sql`、`ai_highlights_migration.sql` 為 Supabase 時期的舊腳本，已由 `db/schema.sql` 取代。
 
 ### 前端建構權限注意
 
@@ -227,15 +231,27 @@ docker-compose exec pipeline python -m pipeline.discovery
 在 `frontend/src/app/articles/[slug]/page.tsx` 文章底部加入相關推廣連結（線上課程、教育書籍等）。
 
 ### 3. 電子報
-訂閱 email 儲存至 Supabase `newsletter_subscribers` 資料表，搭配 [Resend](https://resend.com) 或 [Buttondown](https://buttondown.email) 自動寄送每週精選。
+訂閱 email 儲存至 PostgreSQL `newsletter_subscribers` 資料表，搭配 [Resend](https://resend.com) 或 [Buttondown](https://buttondown.email) 自動寄送每週精選。
+
+---
+
+## Proxmox VM 部署（Cloudflare Tunnel）
+
+```bash
+deploy/deploy-vm.sh   # rsync 原始碼 → 遠端 docker compose build/up → 套用 db/schema.sql
+```
+
+服務內容、伺服器 `.env` 必要變數與 Cloudflare Public Hostname 設定，見 `deploy/docker-compose.vm.yml` 檔頭與 `deploy/deploy-vm.sh`。資料庫資料存在 Docker volume `eduscraper_pgdata`，請自行規劃備份（`pg_dump`）。
 
 ---
 
 ## 前端部署（Vercel）
 
+> 前端已改為直接連 PostgreSQL（`pg`），部署到 Vercel 需要一個可從外部連線的資料庫；目前建議使用上方的 VM 部署。
+
 1. 將 `frontend/` 目錄推送至 GitHub 獨立儲存庫（或 monorepo 設定 root 為 `frontend/`）
 2. 連結至 Vercel，設定所有環境變數
-3. 每次 Supabase 寫入新文章後，ISR（`revalidate = 3600`）會在下次訪問時自動更新首頁；文章詳情頁（`revalidate = 86400`）每日重建一次
+3. 每次寫入新文章後，ISR（`revalidate = 3600`）會在下次訪問時自動更新首頁；文章詳情頁（`revalidate = 86400`）每日重建一次
 
 ---
 
@@ -257,7 +273,7 @@ docker-compose exec pipeline python -m pipeline.discovery
 
 ## 安全性說明
 
-- `SUPABASE_SERVICE_ROLE_KEY` 絕對不可暴露在前端，僅用於伺服器端 API Route
-- Supabase RLS 確保公開只能讀取 `is_published=true` 的文章
+- `DATABASE_URL` 絕對不可暴露在前端（不可加 `NEXT_PUBLIC_` 前綴），僅用於伺服器端
+- 資料庫不對外開放（僅 Docker 內部網路與 127.0.0.1），前端查詢一律在伺服器端執行並過濾 `is_published=true`
 - 電子報 API 對 email 格式進行正則驗證，防止無效輸入
 - Next.js 設有 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff` 等安全 Header

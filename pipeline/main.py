@@ -6,7 +6,7 @@ EduScraper 主要資料管線
   2. 過濾掉已存在於資料庫的文章
   3. 透過 vLLM 進行 AI 翻譯與摘要
   4. 相關度評分過低的文章自動跳過
-  5. 將結構化資料儲存至 Supabase
+  5. 將結構化資料儲存至 PostgreSQL
 
 用法：
   python -m pipeline.main
@@ -49,7 +49,7 @@ from scraper.sources import RSS_SOURCES, SCRAPE_SOURCES  # noqa: E402
 from scraper.rss_fetcher import fetch_all_feeds  # noqa: E402
 from scraper.web_scraper import fetch_all_scrape_sources  # noqa: E402
 from processor.ai_processor import VLLMProcessor  # noqa: E402
-from storage.supabase_client import SupabaseStorage  # noqa: E402
+from storage.postgres_client import PostgresStorage  # noqa: E402
 
 
 def generate_slug(original_title: str, source_url: str) -> str:
@@ -65,7 +65,7 @@ def generate_slug(original_title: str, source_url: str) -> str:
     return f"{base}-{url_hash}"
 
 
-def ensure_unique_slug(slug: str, storage: SupabaseStorage) -> str:
+def ensure_unique_slug(slug: str, storage: PostgresStorage) -> str:
     """若 slug 已存在，在末尾附加時間戳記以確保唯一性。"""
     if not storage.slug_exists(slug):
         return slug
@@ -106,7 +106,7 @@ def run_pipeline(max_articles: int = 50) -> int:
 
     # ── 初始化服務 ────────────────────────────────────────────────
     try:
-        storage = SupabaseStorage()
+        storage = PostgresStorage()
         processor = VLLMProcessor()
     except ValueError as exc:
         logger.error("初始化失敗：%s", exc)

@@ -10,7 +10,7 @@ from slugify import slugify
 
 from processor.discovery_processor import DiscoveryProcessor
 from scraper.discovery_fetcher import DiscoveryFetcher
-from storage.supabase_client import SupabaseStorage
+from storage.postgres_client import PostgresStorage
 
 load_dotenv()
 
@@ -49,7 +49,7 @@ def run_discovery_pipeline(
     coverage_date = datetime.now(timezone.utc).date().isoformat()
 
     try:
-        storage = SupabaseStorage()
+        storage = PostgresStorage()
         fetcher = DiscoveryFetcher()
         processor = DiscoveryProcessor()
     except ValueError as exc:

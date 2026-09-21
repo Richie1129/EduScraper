@@ -39,7 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from processor.ai_processor import VLLMProcessor  # noqa: E402
-from storage.supabase_client import SupabaseStorage  # noqa: E402
+from storage.postgres_client import PostgresStorage  # noqa: E402
 
 
 def run_backfill(
@@ -60,7 +60,7 @@ def run_backfill(
     )
 
     try:
-        storage = SupabaseStorage()
+        storage = PostgresStorage()
         processor = VLLMProcessor()
     except ValueError as exc:
         logger.error("初始化失敗：%s", exc)

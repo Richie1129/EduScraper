@@ -1,5 +1,8 @@
 import { MetadataRoute } from "next";
-import { getAllDiscoverySlugs, getAllSlugs } from "@/lib/supabase";
+import { getAllDiscoverySlugs, getAllSlugs } from "@/lib/db";
+
+// 建置時資料庫尚未啟動，需在執行期定時重新產生，新文章才會進入 sitemap
+export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl =

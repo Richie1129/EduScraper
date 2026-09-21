@@ -40,7 +40,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co",
+              "connect-src 'self'",
               "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com",
             ].join("; "),
           },

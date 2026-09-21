@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getArticles, getLatestDiscoveryReports, getPopularTags } from "@/lib/supabase";
+import { getArticles, getLatestDiscoveryReports, getPopularTags } from "@/lib/db";
 import ArticleCard from "@/components/ArticleCard";
 import DiscoveryCard from "@/components/DiscoveryCard";
 import NewsletterForm from "@/components/NewsletterForm";

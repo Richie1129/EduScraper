@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { searchArticles } from "@/lib/supabase";
+import { searchArticles } from "@/lib/db";
 import { FiSearch, FiInbox } from "react-icons/fi";
 
 export const metadata: Metadata = {

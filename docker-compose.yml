@@ -23,11 +23,8 @@ services:
     environment:
       - WATCHPACK_POLLING=true      # 確保 Docker volume mount 下檔案異動被偵測
       - CHOKIDAR_USEPOLLING=true    # 備援檔案監聽，適用於部分 Docker 環境
-      # Next.js 需要 NEXT_PUBLIC_ 前綴才能在 client-side 讀取
-      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      # 僅 server-side API Route（newsletter）需要此金鑰，不可使用 NEXT_PUBLIC_ 前綴
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      # 資料庫連線字串僅供 server-side 使用，不可使用 NEXT_PUBLIC_ 前綴
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./frontend:/app                        # 源碼熱重載
       - /app/node_modules                      # 隔離 container 內的 node_modules

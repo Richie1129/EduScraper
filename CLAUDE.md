@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 專案概述
 
 EduScraper 是一套全自動教育科技研究策展系統，由兩個獨立部分組成：
-- **Python 後端管線**：抓取 RSS/爬蟲 → vLLM AI 翻譯摘要 → 寫入 Supabase
-- **Next.js 14 前端**：從 Supabase 讀取資料，以 ISR/SSG 呈現繁體中文文章
+- **Python 後端管線**：抓取 RSS/爬蟲 → vLLM AI 翻譯摘要 → 寫入 PostgreSQL
+- **Next.js 14 前端**：從 PostgreSQL 讀取資料，以 ISR/SSG 呈現繁體中文文章
 
 ## 常用指令
 
@@ -57,6 +57,21 @@ docker-compose logs -f pipeline
 docker-compose exec pipeline python -m pipeline.main --limit 20
 ```
 
+### Proxmox VM 部署（Cloudflare Tunnel）
+
+```bash
+# 同步原始碼、遠端建構並重啟（richie@192.168.30.111，~/eduscraper）
+deploy/deploy-vm.sh
+```
+
+- 伺服器目錄：`docker-compose.yml`（來自 `deploy/docker-compose.vm.yml`）、`src/`、`app.env`（本機 `.env` 去除 Supabase 變數）、`.env`（compose 變數，人工維護，腳本不覆寫）
+- 服務：`db`（postgres:17-alpine，資料在 volume `eduscraper_pgdata`，僅綁 127.0.0.1:35432）、`app`（Next.js + 排程器，127.0.0.1:3200）；compose 內的 `cloudflared`（profile `tunnel`）保持停用
+- 伺服器 `.env` 需有：`POSTGRES_PASSWORD`、`NEXT_PUBLIC_SITE_URL`（目前為 `https://eduscraper.wuretedu.com`；此值於建構時內嵌，變更後需重新部署）
+- 對外走 VM 共用的 Cloudflare Tunnel connector `richie-cloudflared`（`~/cloudflared/docker-compose.yml`，tunnel `proxmox-richie-111`，同時服務 grading / science / alphapicks），`eduscraper.wuretedu.com` → `http://eduscraper-app:3000` 於 Cloudflare 後台設定；不要在本專案另外啟用 `COMPOSE_PROFILES=tunnel`
+- 若 `eduscraper_net` 被 `docker compose down` 重建，需 `cd ~/cloudflared && docker compose up -d --force-recreate` 讓 connector 重新接上（一般 `deploy-vm.sh` 不會重建網路）
+- 新網域剛建立時，部分 DNS 解析器（如 8.8.8.8）可能因負快取（TTL 1800 秒）暫時回 NXDOMAIN，約 30 分鐘內自行恢復
+- 手動觸發管線：`ssh richie@192.168.30.111 'docker exec eduscraper-app python -m pipeline.main --limit 20'`
+
 ## 架構說明
 
 ### 資料流
@@ -67,7 +82,7 @@ RSS/爬蟲來源 (scraper/)
     → pipeline/main.py 過濾已存在文章（以 source_url 去重）
     → processor/ai_processor.py 呼叫 vLLM（OpenAI-compatible API）
     → 相關度分數 < RELEVANCE_SCORE_THRESHOLD 則跳過
-    → storage/supabase_client.py 使用 service_role 金鑰寫入 Supabase
+    → storage/postgres_client.py 透過 DATABASE_URL 寫入 PostgreSQL
     → Next.js ISR (revalidate=3600) 自動更新頁面
 ```
 
@@ -78,30 +93,30 @@ RSS/爬蟲來源 (scraper/)
 - `scraper/web_scraper.py`：BeautifulSoup / Playwright 靜態與動態爬蟲
 - `processor/prompts.py`：vLLM system prompt 與 user prompt 模板（要求輸出 JSON）
 - `processor/ai_processor.py`：`VLLMProcessor` 類別，支援主要/備用伺服器切換，最多重試 3 次，自動解析非標準 JSON
-- `storage/supabase_client.py`：`SupabaseStorage` 類別，封裝 articles 與 newsletter_subscribers 表的 CRUD
+- `storage/postgres_client.py`：`PostgresStorage` 類別（psycopg 3），封裝 articles 與 discovery_reports 表的 CRUD；寫入欄位以白名單過濾、JSONB 欄位自動包裝，連線中斷時自動重連
 - `pipeline/main.py`：主協調程式，`run_pipeline()` 串接以上三層；`generate_slug()` 以原始標題 + source_url MD5 雜湊生成唯一 slug
 - `scheduler.py`：純 Python 排程器（Docker 容器內使用），每天 UTC 18:00 執行 pipeline
 
 ### Next.js 前端
 
-- `frontend/src/lib/supabase.ts`：懶惰初始化 Supabase 客戶端，提供 `getArticles`、`getArticleBySlug`、`getAllSlugs`
+- `frontend/src/lib/db.ts`：懶惰初始化 `pg` 連線池（未設定 `DATABASE_URL` 時回傳空結果，建構期可不連資料庫），提供 `getArticles`、`getArticleBySlug`、`getAllSlugs`、`searchArticles` 等；timestamptz 轉 ISO 字串、date 維持 `YYYY-MM-DD`、bigint 轉 number
 - `frontend/src/app/page.tsx`：首頁，ISR `revalidate=3600`，支援分頁與 tag 篩選
 - `frontend/src/app/articles/[slug]/page.tsx`：文章詳情頁，ISR `revalidate=86400`
-- `frontend/src/app/api/newsletter/route.ts`：電子報訂閱 API Route（需 `SUPABASE_SERVICE_ROLE_KEY`）
+- `frontend/src/app/api/newsletter/route.ts`：電子報訂閱 API Route（寫入 `newsletter_subscribers`）
 - `frontend/src/components/AdSense.tsx`：Google AdSense 廣告元件
 
-### 資料庫結構（Supabase PostgreSQL）
+### 資料庫結構（自架 PostgreSQL 17，schema 見 `db/schema.sql`）
 
 `articles` 表主要欄位：`slug`（唯一）、`original_title`、`translated_title`、`source_url`（唯一）、`key_findings`（JSONB 陣列）、`tags`（TEXT[]，有 GIN 索引）、`relevance_score`、`is_published`
 
-RLS 設定：匿名使用者只能讀取 `is_published=true` 的文章；寫入需 service_role 金鑰。
+存取控制：資料庫不對外開放，只有應用程式以 `DATABASE_URL` 連線；前端查詢一律在伺服器端執行並自行過濾 `is_published=true`。全文搜尋為 `search_articles` / `search_articles_count` 資料庫函式。`db/schema.sql` 可重複執行，schema 變更請直接改此檔（`setup_db.sql` 等舊檔為 Supabase 時期遺留，僅供參考）。
 
 ## 環境變數
 
 ### Python 管線（`.env`）
 - `VLLM_BASE_URL`、`VLLM_MODEL_NAME`、`VLLM_API_KEY`：主要 vLLM 伺服器
 - `HSUEH_VLLM_BASE_URL`、`HSUEH_VLLM_MODEL_NAME`、`HSUEH_VLLM_API_KEY`：備用伺服器
-- `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`：Supabase 連線（寫入需 service_role）
+- `DATABASE_URL`：PostgreSQL 連線字串，格式 `postgresql://user:password@host:5432/dbname`
 - `RELEVANCE_SCORE_THRESHOLD`：AI 相關度門檻，預設 5（1–10）
 - `MAX_ARTICLES_PER_RUN`：每次執行上限，預設 50
 
@@ -111,8 +126,7 @@ RLS 設定：匿名使用者只能讀取 `is_published=true` 的文章；寫入�
 - `NEWSLETTER_SECRET`：觸發寄送 API 的驗證 token
 
 ### 前端（`frontend/.env.local`）
-- `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`：前端讀取用
-- `SUPABASE_SERVICE_ROLE_KEY`：電子報 API Route 專用，僅伺服器端使用
+- `DATABASE_URL`：PostgreSQL 連線字串，僅伺服器端使用，不可加 `NEXT_PUBLIC_` 前綴
 - `NEXT_PUBLIC_SITE_URL`：正式網站 URL（SEO/Sitemap）
 - `NEXT_PUBLIC_ADSENSE_ID`：Google AdSense 廣告主 ID
 

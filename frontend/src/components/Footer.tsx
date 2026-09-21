@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FiAlertTriangle, FiBook, FiRss } from "react-icons/fi";
-import { getPopularTags } from "@/lib/supabase";
+import { getPopularTags } from "@/lib/db";
 
 export default async function Footer() {
   const topicLinks = await getPopularTags(6);

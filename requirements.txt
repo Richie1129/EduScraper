@@ -14,8 +14,8 @@ playwright==1.41.2
 # AI 處理（OpenAI 相容 API → vLLM）
 openai>=1.40.0
 
-# 資料庫
-supabase>=2.7.4
+# 資料庫（PostgreSQL）
+psycopg[binary]>=3.2,<4
 
 # 工具
 python-dotenv==1.0.1

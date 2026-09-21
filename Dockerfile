@@ -7,6 +7,13 @@ COPY frontend/package*.json ./
 RUN npm ci
 
 COPY frontend/ .
+
+# NEXT_PUBLIC_* 會在建構時內嵌進產物，必須以 build args 帶入（僅存在於此建構階段）
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_ADSENSE_ID
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_ADSENSE_ID=$NEXT_PUBLIC_ADSENSE_ID
+
 RUN npm run build
 
 # ── 第二階段：執行環境 ──────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { FiHash } from "react-icons/fi";
 import TopicDirectory from "@/components/TopicDirectory";
-import { getPopularTags } from "@/lib/supabase";
+import { getPopularTags } from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "全部主題",

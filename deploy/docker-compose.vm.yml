@@ -1,0 +1,122 @@
+# EduScraper — Proxmox VM（192.168.30.111）部署用 compose
+#
+# 伺服器目錄結構（~/eduscraper）：
+#   docker-compose.yml   本檔（由 deploy/deploy-vm.sh 同步）
+#   src/                 專案原始碼（由 deploy/deploy-vm.sh rsync，不含 .env）
+#   app.env              執行期機密（管線 / Next.js / 電子報），內容同本機 .env（去除已停用的 SUPABASE_*）
+#   .env                 compose 變數（資料庫密碼、站台網址、Cloudflare Tunnel token）
+#   logs/                容器日誌（容器內 appuser uid 1001 需可寫入）
+#
+# 設計重點（與同機 grading / SDL 專案對齊）：
+# - 專案名稱固定為 eduscraper：容器、network 全帶前綴，與同機其他專案隔離
+# - 不發布任何對外主機埠；正式流量走 Cloudflare Tunnel，由 VM 共用的 connector
+#   richie-cloudflared（~/cloudflared）以 eduscraper-app:3000 為 origin，並掛在 eduscraper_net。
+#   區網除錯只綁 127.0.0.1:3200（避開同機已用的 3100 / 8080 / 8100 / 2100 等）
+# - 下方的 cloudflared 服務掛在 profile "tunnel"，預設不啟動（避免與共用 connector 重複）
+# - PostgreSQL 只在 eduscraper_net 內以 db:5432 提供服務，主機端僅綁 127.0.0.1:35432
+#   （避開同機已用的 5432 / 5433 / 15432 / 25432）；資料存在具名 volume eduscraper_pgdata
+# - Cloudflare Zero Trust 後台的 Public Hostname：eduscraper.wuretedu.com → HTTP → eduscraper-app:3000
+
+name: eduscraper
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: eduscraper-db
+    environment:
+      POSTGRES_DB: eduscraper
+      POSTGRES_USER: eduscraper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請在 ~/eduscraper/.env 設定 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 僅在資料目錄為空（首次啟動）時執行；之後的 schema 變更由 deploy-vm.sh 重新套用（可重複執行）
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "127.0.0.1:35432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduscraper -d eduscraper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - eduscraper_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+        NEXT_PUBLIC_ADSENSE_ID: ${NEXT_PUBLIC_ADSENSE_ID:-}
+    image: eduscraper-app:current
+    container_name: eduscraper-app
+    env_file:
+      - app.env
+    environment:
+      # 排程器寄送電子報時讀取此值；以 .env 為準，覆蓋 app.env 內的同名變數
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      # 管線（psycopg）與 Next.js（pg）共用；密碼只存在伺服器的 .env
+      DATABASE_URL: postgresql://eduscraper:${POSTGRES_PASSWORD}@db:5432/eduscraper
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # 只給區網 / 本機除錯；正式流量走 cloudflared
+      - "127.0.0.1:3200:3000"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/robots.txt"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - eduscraper_net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # Cloudflare Tunnel：路由（public hostname → app:3000）在 Zero Trust 後台設定，
+  # 容器這邊只需要 tunnel token。
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: eduscraper-cloudflared
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - eduscraper_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  eduscraper_net:
+    name: eduscraper_net
+
+volumes:
+  pgdata:
+    name: eduscraper_pgdata

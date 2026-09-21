@@ -6,7 +6,7 @@ import MarkdownWithCitations from "@/components/MarkdownWithCitations";
 import {
   getAllDiscoverySlugs,
   getDiscoveryReportBySlug,
-} from "@/lib/supabase";
+} from "@/lib/db";
 
 export const revalidate = 3600;
 

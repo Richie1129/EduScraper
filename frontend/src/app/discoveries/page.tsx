@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FiArrowLeft, FiCompass } from "react-icons/fi";
 import DiscoveryCard from "@/components/DiscoveryCard";
-import { getLatestDiscoveryReports } from "@/lib/supabase";
+import { getLatestDiscoveryReports } from "@/lib/db";
 
 export const revalidate = 3600;
 

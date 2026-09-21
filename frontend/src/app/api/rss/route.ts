@@ -1,4 +1,7 @@
-import { getArticles } from "@/lib/supabase";
+import { getArticles } from "@/lib/db";
+
+// 建置時資料庫尚未啟動，需在執行期定時重新產生，新文章才會進入 RSS
+export const revalidate = 3600;
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eduinsight.tw";
 
