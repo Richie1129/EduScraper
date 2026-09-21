@@ -34,9 +34,6 @@ ENV/
 *.swp
 *.swo
 
-# Docker
-.dockerignore
-
 # Node.js / Next.js
 frontend/node_modules/
 frontend/.next/

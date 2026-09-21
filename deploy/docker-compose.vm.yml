@@ -1,10 +1,13 @@
 # EduScraper — Proxmox VM（192.168.30.111）部署用 compose
 #
+# 映像由 GitHub Actions 建構後推到 ghcr.io/richie1129/eduscraper-app，
+# 伺服器只負責拉取（見 .github/workflows/deploy.yml）；不在 VM 上建構。
+#
 # 伺服器目錄結構（~/eduscraper）：
-#   docker-compose.yml   本檔（由 deploy/deploy-vm.sh 同步）
-#   src/                 專案原始碼（由 deploy/deploy-vm.sh rsync，不含 .env）
+#   docker-compose.yml   本檔（由 workflow 或 deploy/deploy-vm.sh 同步）
+#   schema.sql           db/schema.sql 的副本（首次啟動的 initdb 與後續套用都讀這份）
 #   app.env              執行期機密（管線 / Next.js / 電子報），內容同本機 .env（去除已停用的 SUPABASE_*）
-#   .env                 compose 變數（資料庫密碼、站台網址、Cloudflare Tunnel token）
+#   .env                 compose 變數（資料庫密碼、站台網址、映像 tag）
 #   logs/                容器日誌（容器內 appuser uid 1001 需可寫入）
 #
 # 設計重點（與同機 grading / SDL 專案對齊）：
@@ -35,8 +38,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請在 ~/eduscraper/.env 設定 POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 僅在資料目錄為空（首次啟動）時執行；之後的 schema 變更由 deploy-vm.sh 重新套用（可重複執行）
-      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      # 僅在資料目錄為空（首次啟動）時執行；之後的 schema 變更由部署流程重新套用（可重複執行）
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     ports:
       - "127.0.0.1:35432:5432"
     healthcheck:
@@ -54,13 +57,9 @@ services:
           memory: 512M
 
   app:
-    build:
-      context: ./src
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
-        NEXT_PUBLIC_ADSENSE_ID: ${NEXT_PUBLIC_ADSENSE_ID:-}
-    image: eduscraper-app:current
+    # 映像由 GitHub Actions 建構並推送；IMAGE_TAG 是 commit SHA，由 workflow 寫進 .env。
+    # NEXT_PUBLIC_* 於建構時就已內嵌進映像，改值需重新建構（見 workflow 的 build-args）
+    image: ghcr.io/richie1129/eduscraper-app:${IMAGE_TAG:-main}
     container_name: eduscraper-app
     env_file:
       - app.env

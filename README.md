@@ -235,12 +235,31 @@ docker-compose exec pipeline python -m pipeline.discovery
 
 ---
 
-## Proxmox VM 部署（Cloudflare Tunnel）
+## Proxmox VM 部署（GitHub Actions + GHCR + Cloudflare Tunnel）
 
-```bash
-deploy/deploy-vm.sh   # rsync 原始碼 → 遠端 docker compose build/up → 套用 db/schema.sql
+push 到 `main` 後自動部署：
+
+```
+push main → GitHub 雲端建構映像 → ghcr.io/richie1129/eduscraper-app:<commit-sha>
+         → VM 上的 self-hosted runner 拉取映像 → 套用 db/schema.sql → 重啟 app → 健康檢查
 ```
 
+流程定義於 `.github/workflows/deploy.yml`。VM 端只需一次性設定：
+
+```bash
+# 在 VM 上安裝本專案專用的 self-hosted runner（token 取自 repo Settings → Actions → Runners）
+RUNNER_TOKEN=AXXXX... bash deploy/setup-runner.sh
+```
+
+手動部署／回滾／同步機密檔：
+
+```bash
+deploy/deploy-vm.sh                      # 部署 ghcr 上的 :main
+deploy/deploy-vm.sh --tag <commit-sha>   # 回滾到指定版本
+deploy/deploy-vm.sh --env-only           # 只同步 app.env 與 compose 設定，不重啟
+```
+
+`app.env` 內的金鑰（vLLM / Resend）不進 GitHub，只能由 `deploy/deploy-vm.sh` 從本機 `.env` 同步。
 服務內容、伺服器 `.env` 必要變數與 Cloudflare Public Hostname 設定，見 `deploy/docker-compose.vm.yml` 檔頭與 `deploy/deploy-vm.sh`。資料庫資料存在 Docker volume `eduscraper_pgdata`，請自行規劃備份（`pg_dump`）。
 
 ---

@@ -1,0 +1,199 @@
+# push 到 main：在 GitHub 雲端建構映像 → 推到 ghcr.io → VM 上的 self-hosted runner 拉取並重啟
+#
+# 架構說明：
+# - VM（192.168.30.111）在內網，GitHub 雲端 runner 連不進來，因此部署階段由架在 VM 上的
+#   self-hosted runner 執行（pull 模式，不需把 SSH 私鑰放進 Secrets，也不需開任何對外埠）。
+#   runner 安裝見 deploy/setup-runner.sh，標籤需含 eduscraper。
+# - 映像推到 GitHub Container Registry：拉與推都用 workflow 自帶的 GITHUB_TOKEN，不需額外 secret。
+#   ghcr 的映像名稱必須全小寫。
+# - 安全性：本 repo 為 public，self-hosted runner 只在 push 到 main 時執行；不要加上
+#   pull_request 觸發，否則任何人送 PR 都能在 VM 上執行程式碼。
+#
+# 伺服器前置條件（~/eduscraper，人工維護，workflow 不覆寫）：
+#   .env      compose 變數：POSTGRES_PASSWORD、NEXT_PUBLIC_SITE_URL、NEXT_PUBLIC_ADSENSE_ID
+#   app.env   執行期機密：vLLM / Resend 等，內容同本機 .env（見 deploy/deploy-vm.sh）
+
+name: 建構映像並部署到 VM
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".claude/**"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      skip_schema:
+        description: "略過套用 db/schema.sql"
+        type: boolean
+        default: false
+
+# 同時只允許一個部署；排隊等待，不中斷進行中的部署（中途砍掉會留下半舊半新的容器）
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+env:
+  APP_IMAGE: ghcr.io/richie1129/eduscraper-app
+  # 以 commit SHA 作為唯一版號
+  IMAGE_TAG: ${{ github.sha }}
+  DEPLOY_DIR: /home/richie/eduscraper
+
+jobs:
+  # ────────────────────────────────────────────────────────────────
+  # Job 1：在 GitHub 雲端建構映像並推到 ghcr
+  # ────────────────────────────────────────────────────────────────
+  build:
+    name: 建構並推送映像
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    timeout-minutes: 30
+
+    steps:
+      - name: 取出程式碼
+        uses: actions/checkout@v4
+
+      - name: 設定 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登入 GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 建構並推送 app 映像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # 雙標籤：精確 SHA 版本 + main 最新標籤（手動部署時可直接拉 :main）
+          tags: |
+            ${{ env.APP_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.APP_IMAGE }}:main
+          # NEXT_PUBLIC_* 於建構時內嵌進 Next.js 產物，必須在此帶入；
+          # 值來自 repo variables，未設定時用正式網址（與 CLAUDE.md 記載一致）
+          build-args: |
+            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || 'https://eduscraper.wuretedu.com' }}
+            NEXT_PUBLIC_ADSENSE_ID=${{ vars.NEXT_PUBLIC_ADSENSE_ID }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+
+  # ────────────────────────────────────────────────────────────────
+  # Job 2：VM 上的 runner 拉取映像並重啟服務
+  # ────────────────────────────────────────────────────────────────
+  deploy:
+    name: 拉取映像並重啟
+    needs: build
+    runs-on: [self-hosted, linux, eduscraper]
+    permissions:
+      contents: read
+      packages: read
+    timeout-minutes: 20
+
+    steps:
+      - name: 取出程式碼（需要 compose 檔與 schema.sql）
+        uses: actions/checkout@v4
+
+      - name: 部署
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_SCHEMA: ${{ inputs.skip_schema && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}" || { echo "::error::部署目錄 ${DEPLOY_DIR} 不存在"; exit 1; }
+          for f in .env app.env; do
+            [ -f "$f" ] || { echo "::error::${DEPLOY_DIR}/$f 不存在（機密檔由人工維護，見 deploy/deploy-vm.sh）"; exit 1; }
+          done
+
+          # 磁碟餘裕檢查：剩不到 5G 就中止，不執行任何 pull
+          AVAIL_KB=$(df -Pk "${DEPLOY_DIR}" | awk 'NR==2 {print $4}')
+          echo "磁碟剩餘 $((AVAIL_KB / 1024 / 1024))G"
+          [ "${AVAIL_KB}" -ge 5242880 ] || { echo "::error::磁碟剩餘不到 5G，中止部署"; exit 1; }
+
+          # compose 檔與 schema 以 repo 為準（機密檔 .env / app.env 不動）
+          cp "${GITHUB_WORKSPACE}/deploy/docker-compose.vm.yml" docker-compose.yml
+          cp "${GITHUB_WORKSPACE}/db/schema.sql" schema.sql
+
+          # 記住上一版 tag（供清理），再寫入本次 IMAGE_TAG
+          PREV_TAG=$(grep '^IMAGE_TAG=' .env | cut -d= -f2- || true)
+          if grep -q '^IMAGE_TAG=' .env; then
+            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=${IMAGE_TAG}|" .env
+          else
+            [ -s .env ] && [ -n "$(tail -c 1 .env)" ] && printf '\n' >> .env
+            printf 'IMAGE_TAG=%s\n' "${IMAGE_TAG}" >> .env
+          fi
+          echo "IMAGE_TAG: ${PREV_TAG:-（無）} → ${IMAGE_TAG}"
+
+          # 以本次 workflow 的 GITHUB_TOKEN 登入 ghcr（只在 job 期間有效，結尾一定登出）
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+          trap 'docker logout ghcr.io > /dev/null 2>&1 || true' EXIT
+
+          docker compose config -q
+
+          echo "啟動資料庫並等待 healthy..."
+          docker compose up -d --wait --wait-timeout 120 db
+
+          # 先套 schema 再換 app：新版程式碼可能依賴新欄位（schema.sql 可重複執行）
+          if [ "${SKIP_SCHEMA}" = "1" ]; then
+            echo "已略過 schema 套用"
+          else
+            echo "套用 db/schema.sql..."
+            docker compose exec -T db psql -U eduscraper -d eduscraper -v ON_ERROR_STOP=1 -q < schema.sql
+          fi
+
+          echo "拉取映像 ${APP_IMAGE}:${IMAGE_TAG}..."
+          docker compose pull app
+
+          echo "重啟 app 並等待 healthy..."
+          docker compose up -d --wait --wait-timeout 180 --remove-orphans app
+
+          # 清理本專案舊映像：保留 main、本次與上一版 tag。
+          # 不用全域 image prune，避免動到同機 grading / SDL / alpha 的映像
+          docker images "${APP_IMAGE}" --format '{{.Tag}}' | while read -r TAG; do
+            case "${TAG}" in
+              main|"${IMAGE_TAG}"|"${PREV_TAG}"|"<none>") ;;
+              *) docker image rm "${APP_IMAGE}:${TAG}" > /dev/null 2>&1 && echo "  已移除 ${APP_IMAGE}:${TAG}" || true ;;
+            esac
+          done
+
+      - name: 驗證部署結果
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          docker compose ps
+
+          # 執行中的映像必須是本次 tag
+          CID=$(docker compose ps -q app | head -1)
+          RUNNING=$(docker inspect "${CID}" --format '{{.Config.Image}}')
+          [ "${RUNNING}" = "${APP_IMAGE}:${IMAGE_TAG}" ] \
+            || { echo "::error::app 映像不符：running=${RUNNING} expected=${APP_IMAGE}:${IMAGE_TAG}"; exit 1; }
+
+          # 直接打容器內的 Next.js（對外流量走 VM 共用的 cloudflared）
+          curl -fsS -m 20 -o /dev/null http://127.0.0.1:3200/robots.txt \
+            || { echo "::error::robots.txt 取得失敗"; docker compose logs --tail=80 app; exit 1; }
+          curl -fsS -m 30 -o /dev/null http://127.0.0.1:3200/ \
+            || { echo "::error::首頁取得失敗（可能是資料庫連線問題）"; docker compose logs --tail=80 app; exit 1; }
+          echo "驗證通過：${IMAGE_TAG}"
+
+      - name: 寫入部署摘要
+        if: always()
+        run: |
+          {
+            echo "### EduScraper VM 部署結果"
+            echo ""
+            echo "- commit: \`${GITHUB_SHA:0:7}\`"
+            echo "- 映像: \`${APP_IMAGE}:${GITHUB_SHA:0:7}…\`"
+            echo "- 結果: ${{ job.status }}"
+            echo "- 服務: https://eduscraper.wuretedu.com"
+            echo ""
+            echo '```'
+            docker ps --filter "name=eduscraper-" --format "{{.Names}}\t{{.Image}}\t{{.Status}}" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

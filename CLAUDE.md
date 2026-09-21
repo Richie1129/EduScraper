@@ -57,16 +57,36 @@ docker-compose logs -f pipeline
 docker-compose exec pipeline python -m pipeline.main --limit 20
 ```
 
-### Proxmox VM 部署（Cloudflare Tunnel）
+### Proxmox VM 部署（GitHub Actions + GHCR + Cloudflare Tunnel）
 
-```bash
-# 同步原始碼、遠端建構並重啟（richie@192.168.30.111，~/eduscraper）
-deploy/deploy-vm.sh
+push 到 `main` 後自動部署，不需手動操作：
+
+```
+push main → GitHub 雲端建構映像 → ghcr.io/richie1129/eduscraper-app:<commit-sha>
+         → VM 上的 self-hosted runner 拉取映像 → 套用 schema → 重啟 app → 健康檢查
 ```
 
-- 伺服器目錄：`docker-compose.yml`（來自 `deploy/docker-compose.vm.yml`）、`src/`、`app.env`（本機 `.env` 去除 Supabase 變數）、`.env`（compose 變數，人工維護，腳本不覆寫）
-- 服務：`db`（postgres:17-alpine，資料在 volume `eduscraper_pgdata`，僅綁 127.0.0.1:35432）、`app`（Next.js + 排程器，127.0.0.1:3200）；compose 內的 `cloudflared`（profile `tunnel`）保持停用
-- 伺服器 `.env` 需有：`POSTGRES_PASSWORD`、`NEXT_PUBLIC_SITE_URL`（目前為 `https://eduscraper.wuretedu.com`；此值於建構時內嵌，變更後需重新部署）
+- 流程定義於 `.github/workflows/deploy.yml`；`paths-ignore` 讓純文件變更不觸發部署
+- self-hosted runner 裝在 VM 上（標籤 `eduscraper`），安裝見 `deploy/setup-runner.sh`，只需執行一次。
+  runner 為 repo 層級，無法與同機 grading / daily-stock-alpha / SDL 的 runner 共用
+- **安全性**：本 repo 是 public，workflow 只監聽 push `main` 與手動觸發；
+  絕不可加上 `pull_request` 觸發，否則任何人送 PR 都能在 VM 上執行程式碼
+- 映像 tag 為 commit SHA，並同時更新 `:main`；部署時寫入伺服器 `.env` 的 `IMAGE_TAG`
+- 回滾：`deploy/deploy-vm.sh --tag <commit-sha>`，或在 GitHub 上重跑該 commit 的 workflow
+
+手動部署（GitHub Actions 不可用、回滾、或只同步機密檔時）：
+
+```bash
+deploy/deploy-vm.sh                      # 部署 ghcr 上的 :main
+deploy/deploy-vm.sh --tag <commit-sha>   # 回滾到指定版本
+deploy/deploy-vm.sh --env-only           # 只同步 app.env 與 compose 設定，不重啟
+```
+
+- 伺服器目錄：`docker-compose.yml`（來自 `deploy/docker-compose.vm.yml`）、`schema.sql`（來自 `db/schema.sql`）、`app.env`（本機 `.env` 去除 Supabase 變數）、`.env`（compose 變數，人工維護，腳本不覆寫）
+- **機密不進 GitHub**：`app.env`（vLLM / Resend 金鑰）只能用 `deploy/deploy-vm.sh --env-only` 從本機 `.env` 同步；新增環境變數後別忘了跑一次
+- 服務：`db`（postgres:17-alpine，資料在 volume `eduscraper_pgdata`，僅綁 127.0.0.1:35432）、`app`（Next.js + 排程器，127.0.0.1:3200，映像來自 ghcr）；compose 內的 `cloudflared`（profile `tunnel`）保持停用
+- 伺服器 `.env` 需有：`POSTGRES_PASSWORD`、`NEXT_PUBLIC_SITE_URL`、`IMAGE_TAG`（部署流程自動寫入）
+- `NEXT_PUBLIC_*` 於建構時內嵌進 Next.js 產物，由 workflow 的 build-args 帶入（取自 repo variables，未設定時用 `https://eduscraper.wuretedu.com`）；改值要重新建構，改伺服器 `.env` 沒有用
 - 對外走 VM 共用的 Cloudflare Tunnel connector `richie-cloudflared`（`~/cloudflared/docker-compose.yml`，tunnel `proxmox-richie-111`，同時服務 grading / science / alphapicks），`eduscraper.wuretedu.com` → `http://eduscraper-app:3000` 於 Cloudflare 後台設定；不要在本專案另外啟用 `COMPOSE_PROFILES=tunnel`
 - 若 `eduscraper_net` 被 `docker compose down` 重建，需 `cd ~/cloudflared && docker compose up -d --force-recreate` 讓 connector 重新接上（一般 `deploy-vm.sh` 不會重建網路）
 - 新網域剛建立時，部分 DNS 解析器（如 8.8.8.8）可能因負快取（TTL 1800 秒）暫時回 NXDOMAIN，約 30 分鐘內自行恢復
